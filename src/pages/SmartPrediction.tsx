@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Sparkles, Loader2, TrendingUp, AlertTriangle, MessageSquare, Send, ChevronRight, Calendar } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { predictionData, restockRecommendations } from '../utils/mockData';
+import { useStore } from '../context/StoreContext';
+import { apiService, type PredictionResponse } from '../services/api';
+import { PredictionData, RestockRecommendation } from '../types';
 
 type PredictionState = 'idle' | 'loading' | 'result' | 'learning';
 
