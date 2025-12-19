@@ -20,19 +20,20 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+
   const validateForm = (): boolean => {
     const newErrors: Partial<LoginForm> = {};
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email wajib diisi';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+      newErrors.email = 'Format email tidak valid';
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = 'Password wajib diisi';
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = 'Password minimal 6 karakter';
     }
     
     setErrors(newErrors);
@@ -68,14 +69,15 @@ export function Login() {
     }
   };
 
+
   return (
     <div className="auth-page">
       {/* Left Column - Form Section */}
       <div className="auth-left">
         <div className="auth-container">
           <div className="auth-header">
-            <h1 className="auth-title">Welcome Back</h1>
-            <p className="auth-subtitle">Sign in to your account</p>
+            <h1 className="auth-title">Selamat Datang</h1>
+            <p className="auth-subtitle">Masuk ke akun Anda</p>
           </div>
 
           {authError && (
@@ -89,7 +91,7 @@ export function Login() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Email Address</label>
+              <label className="form-label">Alamat Email</label>
               <div className="input-wrapper">
                 <div className="input-icon">
                   <Mail size={20} />
@@ -116,7 +118,7 @@ export function Login() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className={`auth-input ${errors.password ? 'error' : ''}`}
-                  placeholder="Enter your password"
+                  placeholder="Masukkan password Anda"
                 />
                 <button
                   type="button"
@@ -132,11 +134,8 @@ export function Login() {
             <div className="form-actions">
               <label className="remember-me">
                 <input type="checkbox" className="remember-checkbox" />
-                <span>Remember me</span>
+                <span>Ingat saya</span>
               </label>
-              <a href="#" className="forgot-password">
-                Forgot password?
-              </a>
             </div>
 
             <Button 
@@ -144,13 +143,13 @@ export function Login() {
               className="btn-primary" 
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Sign In'}
+              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Masuk'}
             </Button>
           </form>
 
           <div className="auth-divider">
             <div className="divider-line"></div>
-            <span className="divider-text">Or continue with</span>
+            <span className="divider-text">Atau lanjutkan dengan</span>
           </div>
 
           <Button
@@ -182,16 +181,16 @@ export function Login() {
                     fill="#EA4335"
                   />
                 </svg>
-                Sign in with Google
+                Masuk dengan Google
               </>
             )}
           </Button>
 
           <div className="auth-footer">
             <p>
-              Don't have an account?{' '}
+              Belum punya akun?{' '}
               <Link to="/register" className="footer-link">
-                Sign up
+                Daftar
               </Link>
             </p>
           </div>
@@ -202,6 +201,7 @@ export function Login() {
       <div className="auth-right">
         <AuthIllustration />
       </div>
+
     </div>
   );
 }

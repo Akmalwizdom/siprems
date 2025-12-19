@@ -33,23 +33,23 @@ export function Register() {
   const validateForm = (): boolean => {
     const newErrors: Partial<RegisterForm> = {};
     
-    if (!formData.name) newErrors.name = 'Name is required';
-    if (!formData.storeName) newErrors.storeName = 'Store name is required';
+    if (!formData.name) newErrors.name = 'Nama wajib diisi';
+    if (!formData.storeName) newErrors.storeName = 'Nama toko wajib diisi';
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email wajib diisi';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+      newErrors.email = 'Format email tidak valid';
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = 'Password wajib diisi';
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = 'Password minimal 6 karakter';
     }
     
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = 'Password tidak cocok';
     }
     
     setErrors(newErrors);
@@ -91,8 +91,8 @@ export function Register() {
       <div className="auth-left">
         <div className="auth-container">
           <div className="auth-header">
-            <h1 className="auth-title">Create Account</h1>
-            <p className="auth-subtitle">Start your journey with SIPREMS today.</p>
+            <h1 className="auth-title">Buat Akun</h1>
+            <p className="auth-subtitle">Mulai perjalanan Anda dengan SIPREMS hari ini.</p>
           </div>
 
           {authError && (
@@ -106,7 +106,7 @@ export function Register() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Full Name</label>
+              <label className="form-label">Nama Lengkap</label>
               <div className="input-wrapper">
                 <div className="input-icon">
                   <User size={20} />
@@ -116,14 +116,14 @@ export function Register() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className={`auth-input ${errors.name ? 'error' : ''}`}
-                  placeholder="Enter your full name"
+                  placeholder="Masukkan nama lengkap Anda"
                 />
               </div>
               {errors.name && <p className="input-error-msg">{errors.name}</p>}
             </div>
 
             <div className="form-group">
-              <label className="form-label">Email Address</label>
+              <label className="form-label">Alamat Email</label>
               <div className="input-wrapper">
                  <div className="input-icon">
                   <Mail size={20} />
@@ -140,7 +140,7 @@ export function Register() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Store Name</label>
+              <label className="form-label">Nama Toko</label>
               <div className="input-wrapper">
                 <div className="input-icon">
                   <Store size={20} />
@@ -150,7 +150,7 @@ export function Register() {
                   value={formData.storeName}
                   onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
                   className={`auth-input ${errors.storeName ? 'error' : ''}`}
-                  placeholder="Enter your store name"
+                  placeholder="Masukkan nama toko Anda"
                 />
               </div>
               {errors.storeName && <p className="input-error-msg">{errors.storeName}</p>}
@@ -168,7 +168,7 @@ export function Register() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     className={`auth-input ${errors.password ? 'error' : ''}`}
-                    placeholder="Create password"
+                    placeholder="Buat password"
                   />
                   <button
                     type="button"
@@ -182,7 +182,7 @@ export function Register() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Confirm</label>
+                <label className="form-label">Konfirmasi</label>
                 <div className="input-wrapper">
                    <div className="input-icon">
                     <Lock size={18} />
@@ -192,7 +192,7 @@ export function Register() {
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                     className={`auth-input ${errors.confirmPassword ? 'error' : ''}`}
-                    placeholder="Confirm"
+                    placeholder="Konfirmasi"
                   />
                   <button
                     type="button"
@@ -211,13 +211,13 @@ export function Register() {
               className="btn-primary" 
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Create Account'}
+              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Buat Akun'}
             </Button>
           </form>
 
           <div className="auth-divider">
             <div className="divider-line"></div>
-            <span className="divider-text">or continue with</span>
+            <span className="divider-text">atau lanjutkan dengan</span>
           </div>
 
           <Button
@@ -249,16 +249,16 @@ export function Register() {
                     fill="#EA4335"
                   />
                 </svg>
-                Sign in with Google
+                Daftar dengan Google
               </>
             )}
           </Button>
 
           <div className="auth-footer">
             <p>
-              Already have an account?{' '}
+              Sudah punya akun?{' '}
               <Link to="/" className="footer-link">
-                Sign in
+                Masuk
               </Link>
             </p>
           </div>

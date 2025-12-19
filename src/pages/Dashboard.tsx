@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { TrendingUp, ShoppingBag, Package, AlertCircle, Loader2 } from 'lucide-react';
-import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TimeRange, DashboardMetrics, CategorySales } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config';
+import { useRole } from '../context/AuthContext';
+import { AdminOnly } from '../components/auth/RoleGuard';
 
 const timeRanges: { value: TimeRange; label: string }[] = [
   { value: 'today', label: 'Hari Ini' },
@@ -14,10 +16,38 @@ const timeRanges: { value: TimeRange; label: string }[] = [
   { value: 'year', label: 'Tahun Ini' },
 ];
 
+// Helper function to format large numbers in Indonesian style
+const formatCompactNumber = (value: number): string => {
+  if (value >= 1_000_000_000) {
+    return `Rp ${(value / 1_000_000_000).toFixed(1)}M`;
+  } else if (value >= 1_000_000) {
+    return `Rp ${(value / 1_000_000).toFixed(1)}jt`;
+  } else if (value >= 1_000) {
+    return `Rp ${(value / 1_000).toFixed(0)}rb`;
+  }
+  return `Rp ${value.toLocaleString('id-ID')}`;
+};
+
+// Format number without currency prefix (for counts)
+const formatNumber = (value: number): string => {
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(1)}M`;
+  } else if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}jt`;
+  } else if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(0)}rb`;
+  }
+  return value.toLocaleString('id-ID');
+};
+
 export function Dashboard() {
-  const [selectedRange, setSelectedRange] = useState<TimeRange>('month');
+  const navigate = useNavigate();
+  const { isAdmin } = useRole();
+  // Users can only see 'today' metrics, admins can see all time ranges
+  const [selectedRange, setSelectedRange] = useState<TimeRange>(isAdmin ? 'month' : 'today');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [salesData, setSalesData] = useState<any[]>([]);
+  const [allProducts, setAllProducts] = useState<any[]>([]); // All products for stock health
   const [criticalStockItems, setCriticalStockItems] = useState<any[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySales[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +60,7 @@ export function Dashboard() {
     setLoading(true);
     try {
       const [metricsRes, salesRes, productsRes, categoryRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/dashboard/metrics`),
+        fetch(`${API_BASE_URL}/dashboard/metrics?range=${selectedRange}`),
         fetch(`${API_BASE_URL}/dashboard/sales-chart`),
         fetch(`${API_BASE_URL}/products`),
         fetch(`${API_BASE_URL}/dashboard/category-sales`)
@@ -44,7 +74,14 @@ export function Dashboard() {
       setMetrics(metricsData);
       setSalesData(salesDataRaw);
       setCategorySales(categoryData);
-      setCriticalStockItems(productsData.filter((p: any) => p.stock < 5));
+      // Products now returns paginated format { data: [...], total, page, ... }
+      const products = productsData.data || productsData;
+      const productsList = Array.isArray(products) ? products : [];
+      setAllProducts(productsList);
+      // Critical items: stock below reorder_point (default 100) or below 50 units
+      setCriticalStockItems(productsList.filter((p: any) => 
+        p.stock < (p.reorder_point || 100) || p.stock < 50
+      ));
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -68,7 +105,10 @@ export function Dashboard() {
           <p className="text-slate-500">Selamat datang! Berikut ringkasan bisnis Anda</p>
         </div>
         <div className="flex gap-2">
-          {timeRanges.map((range) => (
+          {/* Users can only view 'today' metrics, Admins can view all time ranges */}
+          {timeRanges
+            .filter((range) => isAdmin || range.value === 'today')
+            .map((range) => (
             <Button
               key={range.value}
               onClick={() => setSelectedRange(range.value)}
@@ -127,41 +167,49 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales Performance Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-slate-200">
-          <div className="mb-6">
-            <h2 className="text-slate-900 mb-1">Performa Penjualan</h2>
-            <p className="text-slate-500">Pantau tren pendapatan Anda</p>
+        {/* Sales Performance Chart - Admin Only */}
+        <AdminOnly>
+          <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-slate-200">
+            <div className="mb-6">
+              <h2 className="text-slate-900 mb-1">Performa Penjualan</h2>
+              <p className="text-slate-500">Pantau tren pendapatan Anda</p>
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={salesData}>
+                <defs>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={12}
+                  tickFormatter={(value) => formatCompactNumber(value)}
+                />
+                <Tooltip
+                  formatter={(value: number) => [formatCompactNumber(value), 'Penjualan']}
+                  labelFormatter={(label) => `Tanggal: ${label}`}
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="sales"
+                  stroke="#4f46e5"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorSales)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={salesData}>
-              <defs>
-                <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="date" stroke="#64748b" />
-              <YAxis stroke="#64748b" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="sales"
-                stroke="#4f46e5"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorSales)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        </AdminOnly>
 
         {/* Top Selling Categories */}
         <div className="bg-white rounded-xl p-6 border border-slate-200">
@@ -206,34 +254,143 @@ export function Dashboard() {
                   ></div>
                   <span className="text-slate-700">{cat.category}</span>
                 </div>
-                <span className="text-slate-900">{cat.value}</span>
+                <span className="text-slate-900 font-medium">{formatCompactNumber(cat.value)}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Critical Stock Alert */}
+      {/* Stock Overview & Top Products Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Stock Health Overview */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <div className="mb-6">
+            <h2 className="text-slate-900 mb-1">Status Stok</h2>
+            <p className="text-slate-500">Gambaran kesehatan inventaris</p>
+          </div>
+          {(() => {
+            // Calculate stock health based on all products and their reorder_point
+            // Default reorder_point = 100 (high threshold for better visibility)
+            const DEFAULT_REORDER_POINT = 100;
+            const totalProducts = allProducts.length || 1;
+            
+            // Critical: stock < 50% of reorder_point or stock < 10
+            const criticalProducts = allProducts.filter(p => 
+              p.stock < (p.reorder_point || DEFAULT_REORDER_POINT) * 0.5 || p.stock < 10
+            );
+            
+            // Low: stock < reorder_point but >= 50% of reorder_point
+            const lowProducts = allProducts.filter(p => 
+              p.stock < (p.reorder_point || DEFAULT_REORDER_POINT) && 
+              p.stock >= (p.reorder_point || DEFAULT_REORDER_POINT) * 0.5 &&
+              p.stock >= 10
+            );
+            
+            // Healthy: stock >= reorder_point
+            const healthyProducts = allProducts.filter(p => 
+              p.stock >= (p.reorder_point || DEFAULT_REORDER_POINT)
+            );
+            
+            const healthyPercent = Math.round((healthyProducts.length / totalProducts) * 100);
+            const lowPercent = Math.round((lowProducts.length / totalProducts) * 100);
+            const criticalPercent = Math.round((criticalProducts.length / totalProducts) * 100);
+            
+            const stockHealthData = [
+              { name: 'Sehat', value: healthyPercent, color: '#22c55e', count: healthyProducts.length },
+              { name: 'Rendah', value: lowPercent, color: '#f59e0b', count: lowProducts.length },
+              { name: 'Kritis', value: criticalPercent, color: '#ef4444', count: criticalProducts.length },
+            ].filter(d => d.value > 0);
+
+            return (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={stockHealthData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {stockHealthData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number) => `${value}%`}
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-6 mt-4">
+                  {stockHealthData.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+                      <span className="text-sm text-slate-600">
+                        {item.name}: {item.value}% ({item.count} produk)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 text-center">
+                  <button 
+                    onClick={() => navigate('/products')}
+                    className="text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
+                  >
+                    Lihat Detail Stok →
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Critical Stock Alert - Info Only */}
       {criticalStockItems.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
           <div className="flex items-start gap-4">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+            <div className="p-3 bg-amber-100 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
             </div>
             <div className="flex-1">
-              <h3 className="text-red-900 mb-2">Peringatan Stok Kritis</h3>
-              <p className="text-red-700 mb-4">
-                {criticalStockItems.length} barang hampir habis
+              <h3 className="text-amber-900 font-semibold mb-2">Perhatian: Stok Rendah</h3>
+              <p className="text-amber-700 mb-4">
+                {criticalStockItems.length} produk membutuhkan perhatian
               </p>
               <div className="flex flex-wrap gap-2">
-                {criticalStockItems.map((item) => (
+                {criticalStockItems.slice(0, 6).map((item) => (
                   <span
                     key={item.id}
-                    className="px-3 py-1 bg-white text-red-700 rounded-full border border-red-200"
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      item.stock < 3 
+                        ? 'bg-red-100 text-red-700 border border-red-200' 
+                        : 'bg-amber-100 text-amber-700 border border-amber-200'
+                    }`}
                   >
-                    {item.name} (tersisa {item.stock})
+                    {item.name} ({item.stock} unit)
                   </span>
                 ))}
+                {criticalStockItems.length > 6 && (
+                  <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm">
+                    +{criticalStockItems.length - 6} lainnya
+                  </span>
+                )}
+              </div>
+              <div className="mt-4">
+                <button 
+                  onClick={() => navigate('/products')}
+                  className="text-sm text-amber-700 hover:text-amber-800 hover:underline font-medium"
+                >
+                  Kelola di Halaman Produk →
+                </button>
               </div>
             </div>
           </div>

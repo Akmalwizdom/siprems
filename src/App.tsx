@@ -2,12 +2,15 @@ import { RouterProvider } from 'react-router';
 import { router } from './utils/routes';
 import { StoreProvider } from './context/StoreContext';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './components/ui/toast';
 
 export default function App() {
   return (
     <AuthProvider>
       <StoreProvider>
-        <RouterProvider router={router} />
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
       </StoreProvider>
     </AuthProvider>
   );

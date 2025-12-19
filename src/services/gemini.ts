@@ -1,6 +1,7 @@
 import { PredictionResponse } from './api';
+import { API_BASE_URL } from '../config';
 
-const AI_CHAT_ENDPOINT = 'http://localhost:8000/api/chat';
+const AI_CHAT_ENDPOINT = `${API_BASE_URL}/chat`;
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -48,10 +49,10 @@ class GeminiService {
     }
 
     const a = action as Record<string, unknown>;
-    
+
     // Validate action type
     const validTypes = ['restock', 'bulk_restock', 'add_product', 'delete_product', 'update_stock', 'none'];
-    const actionType = typeof a.type === 'string' && validTypes.includes(a.type) 
+    const actionType = typeof a.type === 'string' && validTypes.includes(a.type)
       ? a.type as CommandAction['type']
       : 'none';
 
@@ -100,7 +101,7 @@ class GeminiService {
       const safeResponse = typeof data?.response === 'string' && data.response.length > 0
         ? data.response
         : 'Maaf, tidak dapat memproses permintaan Anda saat ini.';
-      
+
       const safeAction = this.createSafeAction(data?.action);
 
       return {
@@ -110,10 +111,10 @@ class GeminiService {
     } catch (error) {
       clearTimeout(timeoutId);
       console.error('AI Gateway error:', error);
-      
+
       // Handle specific error types
       let errorMessage = 'Maaf, terjadi kesalahan saat menghubungi layanan AI. Silakan coba lagi.';
-      
+
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           errorMessage = 'Waktu permintaan habis. Silakan coba lagi.';

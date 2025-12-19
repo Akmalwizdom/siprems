@@ -1,6 +1,5 @@
 // API Service for SIPREMS Backend Integration
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config';
 
 export interface CalendarEvent {
   date: string;
@@ -100,18 +99,24 @@ class ApiService {
     storeId: string,
     events: CalendarEvent[],
     storeConfig?: { CompetitionDistance: number },
-    days?: number
+    days?: number,
+    token?: string
   ): Promise<PredictionResponse> {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${this.baseUrl}/predict/${storeId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           events,
-          store_config: storeConfig || { CompetitionDistance: 500 },
-          days: days || 84,
+          periods: days || 84,  // Backend expects 'periods', not 'days'
         }),
       });
 
@@ -119,7 +124,18 @@ class ApiService {
         throw new Error(`Prediction failed: ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+
+      // Transform API response to match frontend expectations
+      // Backend returns: {status, chartData, recommendations, meta, eventAnnotations}
+      // ML service format fallback: {status, predictions, metadata}
+      return {
+        status: data.status,
+        chartData: data.chartData || data.predictions || [],  // Support both formats
+        recommendations: data.recommendations || [],
+        meta: data.meta || data.metadata || {},  // Support both formats
+        eventAnnotations: data.eventAnnotations || data.event_annotations || [],
+      };
     } catch (error) {
       console.error('Error getting prediction:', error);
       throw error;
@@ -129,16 +145,29 @@ class ApiService {
   async restockProduct(productId: string, quantity: number): Promise<any> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-    
+
     try {
-      const response = await fetch(`${this.baseUrl}/restock`, {
-        method: 'POST',
+      // First, get current stock
+      const productResponse = await fetch(`${this.baseUrl}/products/${productId}`, {
+        signal: controller.signal,
+      });
+
+      if (!productResponse.ok) {
+        throw new Error('Failed to get product details');
+      }
+
+      const productData = await productResponse.json();
+      const currentStock = productData.product?.stock ?? productData.stock ?? 0;
+      const newStock = currentStock + quantity;
+
+      // Update stock using existing PATCH endpoint
+      const response = await fetch(`${this.baseUrl}/products/${productId}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          productId,
-          quantity,
+          stock: newStock,
         }),
         signal: controller.signal,
       });
@@ -205,7 +234,7 @@ class ApiService {
   async updateStock(productId: string, newStock: number): Promise<any> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-    
+
     try {
       const response = await fetch(`${this.baseUrl}/products/${productId}/stock`, {
         method: 'PUT',
@@ -256,25 +285,58 @@ class ApiService {
     }
   }
 
-  async getModelAccuracy(storeId: string = '1'): Promise<ModelAccuracyResponse> {
+  async getModelAccuracy(storeId: string = '1', token?: string): Promise<ModelAccuracyResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/model/accuracy?store_id=${storeId}`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/forecast/model/${storeId}/status`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
         throw new Error(`Get model accuracy failed: ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+
+      // Transform the response to match expected format
+      if (data.status === 'success' && data.model) {
+        const model = data.model;
+        return {
+          status: 'success',
+          accuracy: model.accuracy || null,
+          train_mape: model.train_mape || null,
+          validation_mape: model.validation_mape || null,
+          error_gap: model.validation_mape && model.train_mape
+            ? Math.abs(model.validation_mape - model.train_mape)
+            : null,
+          fit_status: model.accuracy && model.accuracy > 90 ? 'good' : 'fair',
+          data_points: model.data_points || null,
+          model_version: model.store_id || null,
+          last_trained: model.last_trained || null,
+        };
+      }
+
+      return {
+        status: 'error',
+        accuracy: null,
+        train_mape: null,
+        validation_mape: null,
+        error_gap: null,
+        fit_status: 'unknown'
+      };
     } catch (error) {
       console.error('Error getting model accuracy:', error);
-      return { 
-        status: 'error', 
-        accuracy: null, 
+      return {
+        status: 'error',
+        accuracy: null,
         train_mape: null,
         validation_mape: null,
         error_gap: null,

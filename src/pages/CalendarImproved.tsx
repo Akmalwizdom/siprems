@@ -7,8 +7,8 @@ import {
 import { useStore, type CalendarEvent } from '../context/StoreContext';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config';
+import { AdminOnly } from '../components/auth/RoleGuard';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -91,11 +91,57 @@ export function CalendarImproved() {
     title: '',
     type: 'promotion' as CalendarEvent['type'],
     description: '',
-    impact: null as number | null,
+    impactDirection: 'increase' as 'increase' | 'decrease' | 'normal' | 'closed',
+    impactIntensity: 50, // 0-100 percentage
   });
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [userDecision, setUserDecision] = useState<'accepted' | 'edited' | 'rejected' | null>(null);
+  
+  // National holidays state
+  interface NationalHoliday {
+    date: string;
+    name: string;
+    description: string;
+    is_national_holiday: boolean;
+  }
+  const [nationalHolidays, setNationalHolidays] = useState<NationalHoliday[]>([]);
+  
+  // Fetch national holidays when year changes
+  const currentYear = currentDate.getFullYear();
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        console.log(`[Holidays] Fetching holidays for year ${currentYear}`);
+        const response = await fetch(`${API_BASE_URL}/holidays/${currentYear}`);
+        const data = await response.json();
+        console.log('[Holidays] API Response:', data);
+        if (data.status === 'success') {
+          setNationalHolidays(data.holidays);
+          console.log(`[Holidays] Loaded ${data.holidays.length} holidays`);
+        }
+      } catch (error) {
+        console.error('[Holidays] Failed to fetch holidays:', error);
+      }
+    };
+    fetchHolidays();
+  }, [currentYear]);
+
+  // Helper function to calculate impact weight from direction and intensity
+  const calculateImpactWeight = () => {
+    switch (formData.impactDirection) {
+      case 'increase':
+        return 1 + (formData.impactIntensity / 100); // 1.0 - 2.0
+      case 'decrease':
+        return 1 - (formData.impactIntensity / 100); // 0.0 - 1.0
+      case 'normal':
+        return 1.0;
+      case 'closed':
+        return 0.0;
+      default:
+        return 1.0;
+    }
+  };
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -159,7 +205,8 @@ export function CalendarImproved() {
       title: '',
       type: 'promotion',
       description: '',
-      impact: null,
+      impactDirection: 'increase',
+      impactIntensity: 50,
     });
     setAiSuggestion(null);
     setUserDecision(null);
@@ -182,7 +229,8 @@ export function CalendarImproved() {
       title: event.title || '',
       type: event.type || 'promotion',
       description: event.description || '',
-      impact: event.impact_weight || event.impact || null,
+      impactDirection: event.impact_weight > 1 ? 'increase' : event.impact_weight < 1 ? 'decrease' : event.impact_weight === 0 ? 'closed' : 'normal',
+      impactIntensity: Math.abs((event.impact_weight || 1) - 1) * 100,
     });
     setAiSuggestion(null);
     setUserDecision(null);
@@ -208,6 +256,11 @@ export function CalendarImproved() {
 
       const data = await response.json();
       if (data.status === 'success') {
+        // Auto-apply the AI-classified category to formData
+        setFormData(prev => ({
+          ...prev,
+          type: data.suggestion.suggested_category as CalendarEvent['type'],
+        }));
         setAiSuggestion(data.suggestion);
       }
     } catch (error) {
@@ -219,10 +272,10 @@ export function CalendarImproved() {
 
   useEffect(() => {
     if (formData.title.length > 3 && showModal && !aiSuggestion) {
-      // Debounce AI suggestion
+      // Debounce AI suggestion - wait 2.5 seconds after user stops typing
       const timer = setTimeout(() => {
         requestAISuggestion();
-      }, 1000);
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [formData.title, formData.type]);
@@ -283,7 +336,7 @@ export function CalendarImproved() {
     setUserDecision(null);
     
     // CRITICAL: Clear form data immediately (before closeModal)
-    setFormData({ title: '', type: 'promotion', description: '', impact: null });
+    setFormData({ title: '', type: 'promotion', description: '', impactDirection: 'increase', impactIntensity: 50 });
     
     // CRITICAL: Close modal (will also clear state but we did it above to be certain)
     closeModal();
@@ -319,7 +372,7 @@ export function CalendarImproved() {
             date: selectedDate.toISOString().split('T')[0],
             title: formData.title,
             type: formData.type,
-            impact_weight: formData.impact || 0.5,
+            impact_weight: calculateImpactWeight(),
             description: formData.description,
             user_decision: userDecision || 'edited',
             ai_suggestion: aiSuggestion,
@@ -334,7 +387,7 @@ export function CalendarImproved() {
             date: selectedDate.toISOString().split('T')[0],
             title: formData.title,
             type: formData.type,
-            impact_weight: formData.impact || 0.5,
+            impact_weight: calculateImpactWeight(),
             description: formData.description,
             user_decision: userDecision,
             ai_suggestion: aiSuggestion,
@@ -433,7 +486,7 @@ export function CalendarImproved() {
     setEditingEventId(null);
     setSelectedDate(null);
     setSelectedEvent(null);
-    setFormData({ title: '', type: 'promotion', description: '', impact: null });
+    setFormData({ title: '', type: 'promotion', description: '', impactDirection: 'increase', impactIntensity: 50 });
     setAiSuggestion(null);
     setUserDecision(null);
     setIsLoadingAI(false);
@@ -445,6 +498,17 @@ export function CalendarImproved() {
   const getEventsForDate = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0];
     return events.filter(e => e.date === dateStr);
+  };
+
+  // Get national holiday for a specific date
+  const getHolidayForDate = (date: Date): NationalHoliday | undefined => {
+    // Format date as YYYY-MM-DD without timezone conversion
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
+    return nationalHolidays.find(h => h.date === dateStr && h.is_national_holiday);
   };
 
   const formatHeader = () => {
@@ -471,16 +535,30 @@ export function CalendarImproved() {
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       const dateEvents = getEventsForDate(date);
+      const holiday = getHolidayForDate(date);
       const isToday = date.toDateString() === new Date().toDateString();
+      const isHoliday = !!holiday;
 
       days.push(
         <div
           key={day}
           onClick={() => handleDateClick(date)}
-          className="border border-slate-200 bg-white p-2 min-h-32 hover:bg-slate-50 cursor-pointer transition-colors"
+          className={`border p-2 min-h-32 cursor-pointer transition-colors ${
+            isHoliday 
+              ? 'bg-red-50 hover:bg-red-100 border-red-200' 
+              : 'bg-white hover:bg-slate-50 border-slate-200'
+          }`}
+          title={isHoliday ? holiday?.name : undefined}
         >
-          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full mb-2 ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-900'}`}>
-            {day}
+          <div className="flex items-start justify-between mb-2 gap-1">
+            <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${isToday ? 'bg-indigo-600 text-white' : isHoliday ? 'text-red-600 font-bold' : 'text-slate-900'}`}>
+              {day}
+            </div>
+            {isHoliday && (
+              <span className="text-[10px] leading-tight text-right text-red-600 font-medium pt-1">
+                {holiday.name}
+              </span>
+            )}
           </div>
           <div className="space-y-1">
             {dateEvents.map((event: any) => (
@@ -493,28 +571,29 @@ export function CalendarImproved() {
                     e.stopPropagation();
                     handleEditEvent(event);
                   }}>{event.title}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditEvent(event);
-                      }}
-                      className="p-1 bg-white/90 hover:bg-white rounded shadow-sm"
-                      title="Edit event"
-                    >
-                      <Edit3 className="w-3 h-3 text-blue-600" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteEvent(event.id);
-                      }}
-                      className="p-1 bg-white/90 hover:bg-white rounded shadow-sm"
-                      title="Delete event"
-                    >
-                      <Trash2 className="w-3 h-3 text-red-600" />
-                    </button>
-                    {event.calibrated_impact && (
+                  <AdminOnly>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditEvent(event);
+                        }}
+                        className="p-1 bg-white/90 hover:bg-white rounded shadow-sm"
+                        title="Edit event"
+                      >
+                        <Edit3 className="w-3 h-3 text-blue-600" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteEvent(event.id);
+                        }}
+                        className="p-1 bg-white/90 hover:bg-white rounded shadow-sm"
+                        title="Delete event"
+                      >
+                        <Trash2 className="w-3 h-3 text-red-600" />
+                      </button>
+                      {event.calibrated_impact && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -526,7 +605,8 @@ export function CalendarImproved() {
                         <History className="w-3 h-3 text-gray-600" />
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </AdminOnly>
                   {event.ai_confidence && (
                     <Sparkles className="w-3 h-3 opacity-75" />
                   )}
@@ -581,19 +661,21 @@ export function CalendarImproved() {
           </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDateClick(new Date());
-            }}
-            size="sm"
-          >
-            <Plus className="w-5 h-5" />
-            Tambah Acara
-          </Button>
-        </div>
+        <AdminOnly>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDateClick(new Date());
+              }}
+              size="sm"
+            >
+              <Plus className="w-5 h-5" />
+              Tambah Acara
+            </Button>
+          </div>
+        </AdminOnly>
       </div>
 
       {/* Legend */}
@@ -668,116 +750,130 @@ export function CalendarImproved() {
                 </div>
               )}
 
-              {aiSuggestion && (
-                <div className={`p-4 rounded-lg border-2 ${aiSuggestion.warning ? 'bg-yellow-50 border-yellow-300' : 'bg-indigo-50 border-indigo-300'}`}>
-                  <div className="flex items-start gap-3 mb-3">
-                    <Sparkles className={`w-5 h-5 ${aiSuggestion.warning ? 'text-yellow-600' : 'text-indigo-600'} flex-shrink-0 mt-0.5`} />
-                    <div className="flex-1">
-                      <h3 className={`font-medium ${aiSuggestion.warning ? 'text-yellow-900' : 'text-indigo-900'} mb-1`}>
-                        Saran AI {aiSuggestion.warning && '⚠️'}
-                      </h3>
-                      <p className="text-sm text-slate-700 mb-2">{aiSuggestion.rationale}</p>
-                      {aiSuggestion.warning_message && (
-                        <div className="flex items-start gap-2 bg-yellow-100 border border-yellow-300 rounded px-3 py-2 mb-3">
-                          <AlertTriangle className="w-4 h-4 text-yellow-700 flex-shrink-0 mt-0.5" />
-                          <p className="text-xs text-yellow-900">{aiSuggestion.warning_message}</p>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 text-sm">
-                        <div>
-                          <span className="text-slate-600">Kategori: </span>
-                          <span className={`font-medium px-2 py-1 rounded ${getEventConfig(aiSuggestion.suggested_category).bgLight} ${getEventConfig(aiSuggestion.suggested_category).textColor}`}>
-                            {getEventConfig(aiSuggestion.suggested_category).label}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-600">Dampak: </span>
-                          <span className="font-medium">{aiSuggestion.suggested_impact.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-600">Keyakinan: </span>
-                          <span className={`font-medium ${aiSuggestion.confidence >= 0.8 ? 'text-green-600' : aiSuggestion.confidence >= 0.6 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {(aiSuggestion.confidence * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="success"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleAcceptSuggestion();
-                      }}
-                      className="flex-1"
-                      title="Gunakan saran AI untuk kategori & dampak"
-                    >
-                      <CheckCircle className="w-5 h-5" />
-                      <span className="text-base">Terima</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="info"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleEditSuggestion();
-                      }}
-                      className="flex-1"
-                      title="Ubah acara sebelum menyimpan"
-                    >
-                      <Edit3 className="w-5 h-5" />
-                      <span className="text-base">Edit</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleRejectSuggestion(e);
-                      }}
-                      className="flex-1"
-                      title="Batalkan tanpa menyimpan"
-                    >
-                      <XCircle className="w-5 h-5" />
-                      <span className="text-base">Tolak</span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <div>
-                <label className="block text-slate-700 mb-2">Jenis Acara *</label>
-                <select
-                  required
-                  value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value as CalendarEvent['type'] })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="promotion">Promosi</option>
-                  <option value="holiday">Hari Libur</option>
-                  <option value="store-closed">Toko Tutup</option>
-                  <option value="event">Acara</option>
-                </select>
+                <label className="block text-slate-700 mb-2">Kategori Acara</label>
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
+                  isLoadingAI ? 'bg-slate-50 border-slate-200' : 'bg-indigo-50 border-indigo-200'
+                }`}>
+                  {isLoadingAI ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                      <span className="text-slate-600 text-sm">AI sedang mengklasifikasi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      <span className={`font-medium px-3 py-1 rounded-full text-sm ${getEventConfig(formData.type).bgLight} ${getEventConfig(formData.type).textColor}`}>
+                        {getEventConfig(formData.type).label}
+                      </span>
+                      <span className="text-xs text-slate-500">Diklasifikasi oleh AI</span>
+                    </>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 mb-2">Bobot Dampak (opsional)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  value={formData.impact || ''}
-                  onChange={(e) => setFormData({ ...formData, impact: parseFloat(e.target.value) || null })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="0.0 - 2.0 (kosongkan untuk saran AI)"
-                />
+              <div className="space-y-3">
+                <label className="block text-slate-700 mb-2">Dampak pada Penjualan</label>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                    formData.impactDirection === 'increase' 
+                      ? 'border-green-500 bg-green-50' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="impactDirection"
+                      value="increase"
+                      checked={formData.impactDirection === 'increase'}
+                      onChange={() => setFormData({ ...formData, impactDirection: 'increase' })}
+                      className="sr-only"
+                    />
+                    <span className="text-green-600 text-lg">📈</span>
+                    <span className="text-slate-700">Naik</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                    formData.impactDirection === 'decrease' 
+                      ? 'border-orange-500 bg-orange-50' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="impactDirection"
+                      value="decrease"
+                      checked={formData.impactDirection === 'decrease'}
+                      onChange={() => setFormData({ ...formData, impactDirection: 'decrease' })}
+                      className="sr-only"
+                    />
+                    <span className="text-orange-600 text-lg">📉</span>
+                    <span className="text-slate-700">Turun</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                    formData.impactDirection === 'normal' 
+                      ? 'border-slate-500 bg-slate-50' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="impactDirection"
+                      value="normal"
+                      checked={formData.impactDirection === 'normal'}
+                      onChange={() => setFormData({ ...formData, impactDirection: 'normal' })}
+                      className="sr-only"
+                    />
+                    <span className="text-slate-600 text-lg">➖</span>
+                    <span className="text-slate-700">Normal</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                    formData.impactDirection === 'closed' 
+                      ? 'border-red-500 bg-red-50' 
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="impactDirection"
+                      value="closed"
+                      checked={formData.impactDirection === 'closed'}
+                      onChange={() => setFormData({ ...formData, impactDirection: 'closed' })}
+                      className="sr-only"
+                    />
+                    <span className="text-red-600 text-lg">🚫</span>
+                    <span className="text-slate-700">Tutup</span>
+                  </label>
+                </div>
+                
+                {(formData.impactDirection === 'increase' || formData.impactDirection === 'decrease') && (
+                  <div className="mt-4">
+                    <div className="flex justify-between text-sm text-slate-600 mb-1">
+                      <span>Intensitas</span>
+                      <span className="font-medium">{formData.impactIntensity}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      step="10"
+                      value={formData.impactIntensity}
+                      onChange={(e) => setFormData({ ...formData, impactIntensity: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                      <span>Sedikit</span>
+                      <span>Sangat Besar</span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3 mt-2">
+                  Dampak: <span className="font-medium text-indigo-600">{calculateImpactWeight().toFixed(2)}</span>
+                  {formData.impactDirection === 'increase' && ` (+${formData.impactIntensity}% penjualan)`}
+                  {formData.impactDirection === 'decrease' && ` (-${formData.impactIntensity}% penjualan)`}
+                  {formData.impactDirection === 'normal' && ` (tidak ada perubahan)`}
+                  {formData.impactDirection === 'closed' && ` (toko tutup)`}
+                </div>
               </div>
 
               <div>
@@ -836,7 +932,7 @@ export function CalendarImproved() {
                 <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                   <div><span className="font-medium">Judul:</span> {formData.title}</div>
                   <div><span className="font-medium">Jenis:</span> {getEventConfig(formData.type).label}</div>
-                  <div><span className="font-medium">Dampak:</span> {formData.impact?.toFixed(2) || 'Default'}</div>
+                  <div><span className="font-medium">Dampak:</span> {calculateImpactWeight().toFixed(2)} ({formData.impactDirection})</div>
                   <div><span className="font-medium">Keputusan:</span> {userDecision?.toUpperCase()}</div>
                 </div>
               </div>

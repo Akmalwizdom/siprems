@@ -3,8 +3,8 @@ import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRi
 import { Product } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '../config';
+import { AdminOnly } from '../components/auth/RoleGuard';
 
 export function Products() {
   const [filteredProducts, setProducts] = useState<Product[]>([]);
@@ -188,10 +188,12 @@ export function Products() {
           <h1 className="text-slate-900 mb-1">Produk</h1>
           <p className="text-slate-500">Kelola inventaris Anda</p>
         </div>
-        <Button onClick={() => openModal()}>
-          <Plus className="w-5 h-5" />
-          Tambah Produk
-        </Button>
+        <AdminOnly>
+          <Button onClick={() => openModal()}>
+            <Plus className="w-5 h-5" />
+            Tambah Produk
+          </Button>
+        </AdminOnly>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200">
@@ -266,24 +268,26 @@ export function Products() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openModal(product)}
-                        className="text-slate-600 hover:text-indigo-600"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(product.id)}
-                        className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <AdminOnly>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => openModal(product)}
+                          className="text-slate-600 hover:text-indigo-600"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleDelete(product.id)}
+                          className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </AdminOnly>
                   </td>
                 </tr>
               ))

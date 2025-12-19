@@ -2,16 +2,23 @@ import React, { useState } from 'react';
 import { Sparkles, Loader2, TrendingUp, AlertTriangle, MessageSquare, Send, ChevronRight, Calendar, Package, TrendingDown, CheckCircle, Clock } from 'lucide-react';
 import { LineChart, Line, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts';
 import { useStore } from '../context/StoreContext';
+import { useAuth } from '../context/AuthContext';
 import { apiService, type PredictionResponse, type ModelAccuracyResponse } from '../services/api';
 import { geminiService, type ChatMessage, type CommandAction } from '../services/gemini';
 import { PredictionData, RestockRecommendation } from '../types';
 import { Button } from '../components/ui/button';
+import { Alert, AlertTitle, AlertDescription } from '../components/ui/alert';
+import { RestockModal } from '../components/RestockModal';
+import { ChatBot } from '../components/ChatBot';
+import { AdminOnly } from '../components/auth/RoleGuard';
+import Loader from '../components/Loader';
 
 type PredictionState = 'idle' | 'loading' | 'result' | 'learning' | 'error';
 type PredictionRange = 7 | 30 | 90;
 
 export function SmartPrediction() {
   const { events } = useStore();
+  const { getAuthToken } = useAuth();
   const [state, setState] = useState<PredictionState>('idle');
   const [predictionRange, setPredictionRange] = useState<PredictionRange>(30);
   const [predictionData, setPredictionData] = useState<PredictionData[]>([]);
@@ -33,11 +40,43 @@ export function SmartPrediction() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<CommandAction | null>(null);
   const [isConfirmLoading, setIsConfirmLoading] = useState(false);
+  
+  // Restock Alert State
+  const [restockAlert, setRestockAlert] = useState<{
+    show: boolean;
+    type: 'success' | 'error';
+    message: string;
+    productName?: string;
+  } | null>(null);
+  
+  // Restock Modal State
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
+  const [selectedRestockProduct, setSelectedRestockProduct] = useState<RestockRecommendation | null>(null);
+
+  const handleOpenRestockModal = (item: RestockRecommendation) => {
+    setSelectedRestockProduct(item);
+    setIsRestockModalOpen(true);
+  };
+
+  const handleCloseRestockModal = () => {
+    setIsRestockModalOpen(false);
+    setSelectedRestockProduct(null);
+  };
+
+  const handleConfirmRestock = async (quantity: number) => {
+    if (selectedRestockProduct) {
+      await handleRestock(selectedRestockProduct.productId, quantity);
+      handleCloseRestockModal();
+    }
+  };
 
   const fetchForecastAccuracy = async () => {
     try {
+      // Get auth token for authenticated API call
+      const token = await getAuthToken();
+      
       // Use new endpoint with actual regressors for accurate MAPE calculation
-      const result = await apiService.getModelAccuracy('1');
+      const result = await apiService.getModelAccuracy('store_1', token || undefined);
       setForecastAccuracy(result.accuracy);
       setAccuracyDetails(result);
       
@@ -86,8 +125,11 @@ export function SmartPrediction() {
         impact: event.impact ?? impactDefaults[event.type] ?? 0.3,
       }));
 
-      // Call the API with days parameter
-      const response = await apiService.getPrediction('store_1', apiEvents, undefined, daysToUse);
+      // Get auth token for authenticated API call
+      const token = await getAuthToken();
+      
+      // Call the API with days parameter and auth token
+      const response = await apiService.getPrediction('store_1', apiEvents, undefined, daysToUse, token || undefined);
 
       if (response.status === 'success') {
         setPredictionData(response.chartData);
@@ -108,8 +150,8 @@ export function SmartPrediction() {
         // Fetch forecast accuracy from dedicated backend endpoint
         await fetchForecastAccuracy();
 
-        // Update chatbot with insights
-        const firstHoliday = response.chartData.find(d => d.isHoliday);
+        // Update chatbot with insights - with safety checks
+        const firstHoliday = response.chartData?.find?.(d => d.isHoliday);
         const factorInfo = response.meta?.applied_factor ? response.meta.applied_factor.toFixed(2) : '1.00';
         
         // Include data freshness warning in initial message if present
@@ -288,6 +330,8 @@ export function SmartPrediction() {
 
   const handleRestock = async (productId: string, quantity: number, skipChatMessage = false): Promise<boolean> => {
     setRestockingProduct(productId);
+    const productName = restockRecommendations.find(r => r.productId === productId)?.productName || 'Produk';
+    
     try {
       // Add timeout to prevent infinite hang
       const controller = new AbortController();
@@ -296,35 +340,59 @@ export function SmartPrediction() {
       await apiService.restockProduct(productId, quantity);
       clearTimeout(timeoutId);
       
-      // Update recommendations to reflect new stock
+      // Remove product from recommendations (no longer needs restocking)
       setRestockRecommendations(prev =>
-        prev.map(item =>
-          item.productId === productId
-            ? { ...item, currentStock: item.currentStock + quantity }
-            : item
-        )
+        prev.filter(item => item.productId !== productId)
       );
+      
+      // Show success alert - using window.alert for guaranteed visibility
+      window.alert(`✅ Berhasil!\n\n${productName}: Berhasil menambahkan ${quantity} unit ke stok.`);
+      
+      // Also set state for in-page alert
+      setRestockAlert({
+        show: true,
+        type: 'success',
+        message: `Berhasil menambahkan ${quantity} unit ke stok`,
+        productName,
+      });
+      
+      // Auto-hide alert after 5 seconds
+      setTimeout(() => setRestockAlert(null), 5000);
       
       // Only add chat message if not called from handleConfirmAction
       if (!skipChatMessage) {
-        const productName = restockRecommendations.find(r => r.productId === productId)?.productName || 'product';
         setChatMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            content: `Berhasil restock ${quantity} unit untuk ${productName}.`,
+            content: `✅ Berhasil restock ${quantity} unit untuk ${productName}.`,
           },
         ]);
       }
       return true;
     } catch (error) {
       console.error('Restock error:', error);
+      
+      // Show error alert - using window.alert for guaranteed visibility
+      window.alert(`❌ Gagal!\n\n${productName}: Gagal menyimpan ke database. Silakan coba lagi.`);
+      
+      // Also set state for in-page alert
+      setRestockAlert({
+        show: true,
+        type: 'error',
+        message: 'Gagal menyimpan ke database. Silakan coba lagi.',
+        productName,
+      });
+      
+      // Auto-hide alert after 5 seconds
+      setTimeout(() => setRestockAlert(null), 5000);
+      
       if (!skipChatMessage) {
         setChatMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            content: `Gagal melakukan restock. Silakan coba lagi.`,
+            content: `❌ Gagal melakukan restock untuk ${productName}. Silakan coba lagi.`,
           },
         ]);
       }
@@ -510,7 +578,7 @@ export function SmartPrediction() {
   // Idle State
   if (state === 'idle') {
     return (
-      <div className="max-w-2xl mx-auto text-center py-20">
+      <div className="max-w-2xl mx-auto text-center py-12 lg:py-20">
         <div className="inline-flex w-24 h-24 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-3xl items-center justify-center mb-6">
           <Sparkles className="w-12 h-12 text-white" />
         </div>
@@ -518,28 +586,50 @@ export function SmartPrediction() {
         <p className="text-sm text-slate-500 mb-8 max-w-lg mx-auto">
           AI kami menganalisis riwayat penjualan, tren musiman, dan hari libur mendatang untuk memprediksi permintaan dan merekomendasikan level stok optimal.
         </p>
-        <Button
-          onClick={() => handleStartPrediction()}
-          size="lg"
-          className="shadow-lg hover:shadow-xl"
-        >
-          <Sparkles className="w-5 h-5" />
-          Mulai Prediksi
-        </Button>
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <TrendingUp className="w-8 h-8 text-indigo-600 mb-3" />
-            <h3 className="text-base font-medium text-slate-900 mb-1">Analisis Tren</h3>
+        
+        {/* Quick Action Buttons - Admin Only */}
+        <AdminOnly>
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            <Button
+              onClick={() => handleStartPrediction(7)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              Prediksi 7 Hari
+            </Button>
+            <Button
+              onClick={() => handleStartPrediction(30)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Sparkles className="w-4 h-4" />
+              Prediksi 30 Hari
+            </Button>
+            <Button
+              onClick={() => handleStartPrediction(90)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Calendar className="w-4 h-4" />
+              Prediksi 90 Hari
+            </Button>
+          </div>
+        </AdminOnly>
+
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 text-left" style={{ marginTop: '2rem', gap: '1rem' }}>
+          <div className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer" style={{ padding: '1.5rem' }} onClick={() => handleStartPrediction(30)}>
+            <TrendingUp className="w-8 h-8 text-indigo-600" style={{ marginBottom: '0.75rem' }} />
+            <h3 className="text-base font-medium text-slate-900" style={{ marginBottom: '0.25rem' }}>Analisis Tren</h3>
             <p className="text-sm text-slate-500">Identifikasi pola dalam data penjualan Anda</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <Calendar className="w-8 h-8 text-indigo-600 mb-3" />
-            <h3 className="text-base font-medium text-slate-900 mb-1">Dampak Hari Libur</h3>
+          <div className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer" style={{ padding: '1.5rem' }} onClick={() => handleStartPrediction(30)}>
+            <Calendar className="w-8 h-8 text-indigo-600" style={{ marginBottom: '0.75rem' }} />
+            <h3 className="text-base font-medium text-slate-900" style={{ marginBottom: '0.25rem' }}>Dampak Hari Libur</h3>
             <p className="text-sm text-slate-500">Prediksi lonjakan saat acara khusus</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <AlertTriangle className="w-8 h-8 text-indigo-600 mb-3" />
-            <h3 className="text-base font-medium text-slate-900 mb-1">Peringatan Cerdas</h3>
+          <div className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer" style={{ padding: '1.5rem' }} onClick={() => handleStartPrediction(30)}>
+            <AlertTriangle className="w-8 h-8 text-indigo-600" style={{ marginBottom: '0.75rem' }} />
+            <h3 className="text-base font-medium text-slate-900" style={{ marginBottom: '0.25rem' }}>Peringatan Cerdas</h3>
             <p className="text-sm text-slate-500">Notifikasi sebelum stok habis</p>
           </div>
         </div>
@@ -551,8 +641,8 @@ export function SmartPrediction() {
   if (state === 'loading') {
     return (
       <div className="max-w-2xl mx-auto text-center py-20">
-        <div className="inline-flex w-24 h-24 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-3xl items-center justify-center mb-6 animate-pulse">
-          <Loader2 className="w-12 h-12 text-white animate-spin" />
+        <div className="flex justify-center mb-6">
+          <Loader />
         </div>
         <h1 className="text-2xl text-slate-900 mb-2">Menganalisis Data Anda...</h1>
         <p className="text-sm text-slate-500 mb-8">
@@ -688,19 +778,30 @@ export function SmartPrediction() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-white" />
+          {(() => {
+            const appliedFactor = predictionMeta.applied_factor;
+            const isValidFactor = appliedFactor != null && !isNaN(appliedFactor) && isFinite(appliedFactor);
+            const growthPercentage = isValidFactor ? ((appliedFactor - 1) * 100) : 0;
+            const isPositive = growthPercentage >= 0;
+            
+            return (
+              <div className="bg-white rounded-xl p-6 border border-slate-200">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <span className={`text-sm font-medium ${isPositive ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
+                    {isValidFactor ? `${isPositive ? '+' : ''}${growthPercentage.toFixed(1)}%` : 'N/A'}
+                  </span>
+                </div>
+                <h3 className="text-sm text-slate-500 mb-1">Faktor Pertumbuhan</h3>
+                <p className="text-2xl font-medium text-slate-900">
+                  {isValidFactor ? `${growthPercentage.toFixed(1)}%` : 'N/A'}
+                </p>
+                <p className="text-xs text-slate-400 mt-2">vs periode sebelumnya</p>
               </div>
-              <span className={`text-sm font-medium ${((predictionMeta.applied_factor - 1) * 100) >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
-                {((predictionMeta.applied_factor - 1) * 100) >= 0 ? '+' : ''}{((predictionMeta.applied_factor - 1) * 100).toFixed(1)}%
-              </span>
-            </div>
-            <h3 className="text-sm text-slate-500 mb-1">Faktor Pertumbuhan</h3>
-            <p className="text-2xl font-medium text-slate-900">{((predictionMeta.applied_factor - 1) * 100).toFixed(1)}%</p>
-            <p className="text-xs text-slate-400 mt-2">vs periode sebelumnya</p>
-          </div>
+            );
+          })()}
 
           <div className="bg-white rounded-xl p-6 border border-slate-200">
             <div className="flex items-center justify-between mb-4">
@@ -728,24 +829,34 @@ export function SmartPrediction() {
             </div>
             <ResponsiveContainer width="100%" height={400}>
               <ComposedChart data={predictionData}>
-                {/* 1. Define Gradient for "Forecast" style */}
                 <defs>
-                  <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
+                   <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.05}/>
                   </linearGradient>
                 </defs>
                 
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis 
                   dataKey="date" 
                   stroke="#64748b" 
                   tick={{ fontSize: 12 }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                  tickMargin={10}
+                  tickFormatter={(value) => {
+                    if (!value) return '';
+                    const date = new Date(value);
+                    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                  }}
                 />
-                <YAxis stroke="#64748b" tick={{ fontSize: 12 }} />
+                <YAxis 
+                  stroke="#64748b" 
+                  tick={{ fontSize: 12 }} 
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
+                    if (value >= 1000) return `${(value / 1000).toFixed(0)}rb`;
+                    return value;
+                  }}
+                />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
@@ -754,11 +865,28 @@ export function SmartPrediction() {
                     padding: '12px',
                     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                   }}
+                  formatter={(value: number) => {
+                    return new Intl.NumberFormat('id-ID', {
+                      style: 'currency',
+                      currency: 'IDR',
+                      minimumFractionDigits: 0
+                    }).format(value);
+                  }}
+                  labelFormatter={(value) => {
+                    if (!value) return '';
+                    return new Date(value).toLocaleDateString('id-ID', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    });
+                  }}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 
                 {/* 2. Visual Separation: Historical (Solid) vs Predicted (Dashed/Gradient) */}
-                {/* Historical: Solid Line, Darker color */}
+                
+                {/* Historical: Solid Line, Smooth Curves */}
                 <Line
                   type="monotone"
                   dataKey="historical"
@@ -781,9 +909,10 @@ export function SmartPrediction() {
                   fillOpacity={1}
                   name="Prediksi AI"
                   dot={false}
+                  activeDot={{ r: 6 }}
                   connectNulls={true}
                 />
-                
+              
                 {/* 3. Annotations: Event Markers & Labels */}
                 {eventAnnotations.map((event, idx) => {
                   const mainType = event.types[0] || 'event';
@@ -841,13 +970,47 @@ export function SmartPrediction() {
               </div>
             </div>
           </div>
+        </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Restock Recommendations */}
           <div className="bg-white rounded-xl p-6 border border-slate-200">
             <div className="mb-6">
               <h2 className="text-xl font-medium text-slate-900 mb-1">Rekomendasi Pengisian Stok</h2>
               <p className="text-sm text-slate-500">Produk yang diprediksi akan melonjak permintaannya</p>
             </div>
+            
+            {/* Restock Alert */}
+            {restockAlert && restockAlert.show && (
+              <Alert 
+                variant={restockAlert.type === 'success' ? 'success' : 'destructive'}
+                className="mb-4"
+              >
+                {restockAlert.type === 'success' ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                <AlertTitle>
+                  {restockAlert.type === 'success' ? 'Berhasil!' : 'Gagal!'}
+                </AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>
+                    {restockAlert.productName && (
+                      <strong>{restockAlert.productName}: </strong>
+                    )}
+                    {restockAlert.message}
+                  </span>
+                  <button 
+                    onClick={() => setRestockAlert(null)}
+                    className="ml-4 text-sm underline hover:no-underline"
+                  >
+                    Tutup
+                  </button>
+                </AlertDescription>
+              </Alert>
+            )}
+            
             <div className="space-y-3">
               {(!restockRecommendations || restockRecommendations.length === 0) ? (
                 <div className="text-center py-8 text-slate-500">
@@ -899,7 +1062,7 @@ export function SmartPrediction() {
                         </div>
                       </div>
                       <Button
-                        onClick={() => handleRestock(productId, recommendedRestock)}
+                        onClick={() => handleOpenRestockModal(item)}
                         disabled={restockingProduct === productId || recommendedRestock <= 0}
                         className="ml-4"
                       >
@@ -961,8 +1124,19 @@ export function SmartPrediction() {
               </div>
             </div>
           )}
-      </div>
+        </div>
 
+      {/* Restock Modal */}
+      <RestockModal
+        isOpen={isRestockModalOpen}
+        onClose={handleCloseRestockModal}
+        onConfirm={handleConfirmRestock}
+        product={selectedRestockProduct}
+        isLoading={restockingProduct !== null}
+      />
+
+      {/* ChatBot - Only shows after prediction is used */}
+      {state === 'result' && <ChatBot />}
     </div>
   );
 }
