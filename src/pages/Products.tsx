@@ -1,13 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRight, Coffee } from 'lucide-react';
 import { Product } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
 import { API_BASE_URL } from '../config';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { ConfirmDialog } from '../components/ui/confirm-dialog';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui/toast';
 
 export function Products() {
+  const { getAuthToken } = useAuth();
+  const { showToast } = useToast();
+  
   // All products from API (cached for client-side filtering)
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -22,6 +27,8 @@ export function Products() {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
     category: '',
@@ -103,6 +110,7 @@ export function Products() {
         costPrice: parseFloat(p.cost_price),
         sellingPrice: parseFloat(p.selling_price),
         stock: p.stock,
+        imageUrl: p.image_url || '',
         description: p.description || ''
       }));
       
@@ -161,32 +169,99 @@ export function Products() {
       description: '',
     });
     setSelectedFile(null);
+    setImagePreview(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    if (editingProduct) {
-      setAllProducts(
-        allProducts.map((p) =>
-          p.id === editingProduct.id ? { ...formData as Product, id: editingProduct.id } : p
-        )
-      );
-    } else {
-      const newProduct: Product = {
-        ...formData as Product,
-        id: Date.now().toString(),
+    try {
+      const token = await getAuthToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
       };
-      setAllProducts([...allProducts, newProduct]);
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      let productId: string;
+
+      if (editingProduct) {
+        // Update existing product
+        const response = await fetch(`${API_BASE_URL}/products/${editingProduct.id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            stock: formData.stock,
+            price: formData.sellingPrice,
+          }),
+        });
+        
+        if (!response.ok) throw new Error('Failed to update product');
+        productId = editingProduct.id;
+      } else {
+        // Create new product
+        const response = await fetch(`${API_BASE_URL}/products`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: formData.name,
+            category: formData.category,
+            selling_price: formData.sellingPrice,
+            cost_price: formData.costPrice,
+            stock: formData.stock,
+            description: formData.description,
+          }),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to create product');
+        }
+        
+        const result = await response.json();
+        productId = result.product.id.toString();
+      }
+
+      // Upload image if selected
+      if (selectedFile && imagePreview) {
+        const imageResponse = await fetch(`${API_BASE_URL}/products/${productId}/image`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            image: imagePreview,
+          }),
+        });
+        
+        if (!imageResponse.ok) {
+          console.error('Image upload failed, but product was saved');
+        }
+      }
+
+      showToast(editingProduct ? 'Produk berhasil diperbarui' : 'Produk berhasil ditambahkan', 'success');
+      await fetchAllProducts(); // Refresh list
+      closeModal();
+    } catch (error: any) {
+      console.error('Submit error:', error);
+      showToast(error.message || 'Gagal menyimpan produk', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    closeModal();
   };
 
   const handleDeleteClick = (product: Product) => {
@@ -257,6 +332,7 @@ export function Products() {
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
+                <th className="px-6 py-4 text-left text-slate-700">Gambar</th>
                 <th className="px-6 py-4 text-left text-slate-700">Nama Produk</th>
                 <th className="px-6 py-4 text-left text-slate-700">Kategori</th>
                 <th className="px-6 py-4 text-left text-slate-700">Harga Modal</th>
@@ -268,7 +344,7 @@ export function Products() {
             <tbody>
               {paginatedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                     Produk tidak ditemukan
                   </td>
                 </tr>
@@ -276,10 +352,27 @@ export function Products() {
                 paginatedProducts.map((product) => (
                 <tr key={product.id} className="border-b border-slate-200 hover:bg-slate-50">
                   <td className="px-6 py-4">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                      {product.imageUrl ? (
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : (
+                        <Coffee className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
                     <div>
-                      <p className="text-slate-900">{product.name}</p>
+                      <p className="text-slate-900 font-medium">{product.name}</p>
                       {product.description && (
-                        <p className="text-xs text-slate-500 mt-1">{product.description}</p>
+                        <p className="text-xs text-slate-500 mt-1 max-w-[200px] truncate">{product.description}</p>
                       )}
                     </div>
                   </td>
@@ -460,19 +553,26 @@ export function Products() {
                     htmlFor="file-upload"
                     className="flex flex-col items-center cursor-pointer"
                   >
-                    <Upload className="w-12 h-12 text-slate-400 mb-3" />
-                    {selectedFile ? (
+                    {imagePreview ? (
                       <div className="text-center">
-                        <p className="text-slate-900">{selectedFile.name}</p>
+                        <img 
+                          src={imagePreview} 
+                          alt="Preview" 
+                          className="w-32 h-32 object-cover rounded-lg mx-auto mb-3"
+                        />
+                        <p className="text-slate-900">{selectedFile?.name}</p>
                         <p className="text-xs text-slate-500 mt-1">
-                          {(selectedFile.size / 1024).toFixed(2)} KB
+                          Klik untuk mengubah gambar
                         </p>
                       </div>
                     ) : (
-                      <div className="text-center">
-                        <p className="text-slate-700">Klik untuk unggah atau seret file</p>
-                        <p className="text-xs text-slate-500 mt-1">PNG, JPG maksimal 5MB</p>
-                      </div>
+                      <>
+                        <Upload className="w-12 h-12 text-slate-400 mb-3" />
+                        <div className="text-center">
+                          <p className="text-slate-700">Klik untuk unggah atau seret file</p>
+                          <p className="text-xs text-slate-500 mt-1">PNG, JPG maksimal 5MB</p>
+                        </div>
+                      </>
                     )}
                   </label>
                 </div>
@@ -494,12 +594,20 @@ export function Products() {
                   type="button"
                   variant="outline"
                   onClick={closeModal}
+                  disabled={isSubmitting}
                   className="flex-1"
                 >
                   Batal
                 </Button>
-                <Button type="submit" className="flex-1">
-                  {editingProduct ? 'Perbarui Produk' : 'Tambah Produk'}
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    editingProduct ? 'Perbarui Produk' : 'Tambah Produk'
+                  )}
                 </Button>
               </div>
             </form>

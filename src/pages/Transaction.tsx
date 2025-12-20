@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Printer } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Printer, Coffee } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
@@ -129,6 +129,7 @@ export function Transaction() {
         costPrice: parseFloat(p.cost_price),
         sellingPrice: parseFloat(p.selling_price),
         stock: p.stock,
+        imageUrl: p.image_url || '',
         description: p.description || ''
       })));
     } catch (error) {
@@ -475,8 +476,19 @@ function POSView({
               onClick={() => addToCart(product)}
               className="h-auto bg-white rounded-xl p-4 border border-slate-200 hover:border-indigo-500 hover:shadow-md text-left flex-col items-stretch"
             >
-              <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg mb-3 flex items-center justify-center">
-                <Package className="w-12 h-12 text-slate-400" />
+              <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                {product.imageUrl ? (
+                  <img 
+                    src={product.imageUrl} 
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Coffee className="w-12 h-12 text-slate-400" />
+                )}
               </div>
               <h3 className="text-slate-900 mb-1 line-clamp-1">{product.name}</h3>
               <p className="text-xs text-slate-500 mb-2">{product.category}</p>
@@ -512,8 +524,16 @@ function POSView({
               <div className="space-y-4">
                 {cart.map((item) => (
                   <div key={item.product.id} className="flex gap-3">
-                    <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Package className="w-8 h-8 text-slate-400" />
+                    <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {item.product.imageUrl ? (
+                        <img 
+                          src={item.product.imageUrl} 
+                          alt={item.product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Coffee className="w-8 h-8 text-slate-400" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="text-slate-900 truncate">{item.product.name}</h4>

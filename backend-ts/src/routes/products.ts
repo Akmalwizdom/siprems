@@ -198,4 +198,79 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
     }
 });
 
+// Upload product image (Admin only)
+router.post('/:id/image', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { image } = req.body; // Base64 encoded image
+
+        if (!image) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'Image data is required'
+            });
+        }
+
+        // Extract base64 data and content type
+        const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'Invalid image format. Expected base64 data URL.'
+            });
+        }
+
+        const contentType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Generate unique filename
+        const extension = contentType.split('/')[1] || 'jpg';
+        const filename = `product-${id}-${Date.now()}.${extension}`;
+        const filePath = `products/${filename}`;
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(filePath, buffer, {
+                contentType,
+                upsert: true
+            });
+
+        if (uploadError) {
+            console.error('[Products] Upload error:', uploadError);
+            throw uploadError;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(filePath);
+
+        const imageUrl = urlData.publicUrl;
+
+        // Update product with new image URL
+        const { data: product, error: updateError } = await supabase
+            .from('products')
+            .update({ image_url: imageUrl })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.json({
+            status: 'success',
+            image_url: imageUrl,
+            product
+        });
+    } catch (error: any) {
+        console.error('[Products] Image upload failed:', error);
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
 export default router;
