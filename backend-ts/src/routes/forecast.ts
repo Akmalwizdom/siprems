@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { mlClient } from '../services/ml-client';
 import { supabase } from '../services/database';
 import { authenticate, requireAdmin, optionalAuth, AuthenticatedRequest } from '../middleware/auth';
+import { holidayService } from '../services/holiday';
 
 const router = Router();
 
@@ -325,21 +326,78 @@ router.post('/:store_id', authenticate, requireAdmin, async (req: AuthenticatedR
             // Continue without recommendations if there's an error
         }
 
-        // Calculate event annotations from events
-        const eventAnnotations = (events || []).reduce((acc: any[], event: any) => {
-            const existing = acc.find(a => a.date === event.date);
-            if (existing) {
-                existing.titles.push(event.title || event.type);
-                existing.types.push(event.type);
-            } else {
-                acc.push({
-                    date: event.date,
-                    titles: [event.title || event.type],
-                    types: [event.type],
-                });
+        // Determine chart date range for filtering events
+        const chartStartDate = historicalChartData[0]?.date;
+        const chartEndDate = predictions.length > 0
+            ? predictions[predictions.length - 1]?.ds
+            : historicalChartData[historicalChartData.length - 1]?.date;
+
+        console.log(`[Forecast] Chart date range: ${chartStartDate} to ${chartEndDate}`);
+
+        // Calculate event annotations from events - ONLY for events within chart date range
+        const eventAnnotations: { date: string; titles: string[]; types: string[] }[] = (events || [])
+            .filter((event: any) => {
+                // Filter events to only those within chart date range
+                return event.date >= chartStartDate && event.date <= chartEndDate;
+            })
+            .reduce((acc: any[], event: any) => {
+                const existing = acc.find(a => a.date === event.date);
+                if (existing) {
+                    existing.titles.push(event.title || event.type);
+                    existing.types.push(event.type);
+                } else {
+                    acc.push({
+                        date: event.date,
+                        titles: [event.title || event.type],
+                        types: [event.type],
+                    });
+                }
+                return acc;
+            }, []);
+
+        // Fetch national holidays for the chart date range and merge into eventAnnotations
+        try {
+            // chartStartDate and chartEndDate are already defined above
+            if (chartStartDate && chartEndDate) {
+                const startYear = new Date(chartStartDate).getFullYear();
+                const endYear = new Date(chartEndDate).getFullYear();
+
+                console.log(`[Forecast] Fetching holidays for years ${startYear}-${endYear} (chart: ${chartStartDate} to ${chartEndDate})`);
+
+                // Fetch holidays for all years in the chart range
+                for (let year = startYear; year <= endYear; year++) {
+                    const holidays = await holidayService.getHolidaysForYear(year);
+
+                    for (const holiday of holidays) {
+                        // Only include holidays within the chart date range
+                        if (holiday.date >= chartStartDate && holiday.date <= chartEndDate) {
+                            const existing = eventAnnotations.find(a => a.date === holiday.date);
+                            if (existing) {
+                                // Add holiday to existing annotation if not already present
+                                if (!existing.titles.includes(holiday.name)) {
+                                    existing.titles.push(holiday.name);
+                                    existing.types.push(holiday.is_national_holiday ? 'holiday' : 'event');
+                                }
+                            } else {
+                                // Create new annotation for holiday
+                                eventAnnotations.push({
+                                    date: holiday.date,
+                                    titles: [holiday.name],
+                                    types: [holiday.is_national_holiday ? 'holiday' : 'event'],
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Sort annotations by date
+                eventAnnotations.sort((a, b) => a.date.localeCompare(b.date));
+                console.log(`[Forecast] Total event annotations (including holidays): ${eventAnnotations.length}`);
             }
-            return acc;
-        }, []);
+        } catch (error) {
+            console.error('[Forecast] Error fetching holidays for annotations:', error);
+            // Continue without holidays if there's an error
+        }
 
         const transformedResponse = {
             status: result.status || 'success',

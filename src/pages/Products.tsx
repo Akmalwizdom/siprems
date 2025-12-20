@@ -362,11 +362,12 @@ export function Products() {
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Pilih kategori</option>
-                  <option value="Electronics">Elektronik</option>
-                  <option value="Home & Kitchen">Rumah & Dapur</option>
-                  <option value="Stationery">Alat Tulis</option>
-                  <option value="Sports">Olahraga</option>
-                  <option value="Fashion">Fashion</option>
+                  <option value="Coffee">Coffee</option>
+                  <option value="Tea">Tea</option>
+                  <option value="Non-Coffee">Non-Coffee</option>
+                  <option value="Pastry">Pastry</option>
+                  <option value="Light Meals">Light Meals</option>
+                  <option value="Seasonal">Seasonal</option>
                 </select>
               </div>
 

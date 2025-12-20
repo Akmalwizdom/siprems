@@ -12,6 +12,9 @@ import { RestockModal } from '../components/RestockModal';
 import { ChatBot } from '../components/ChatBot';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import Loader from '../components/Loader';
+import { PredictionChartSVG } from '../components/PredictionChartSVG';
+import { ScrollArea } from '../components/ui/scroll-area';
+
 
 type PredictionState = 'idle' | 'loading' | 'result' | 'learning' | 'error';
 type PredictionRange = 7 | 30 | 90;
@@ -818,164 +821,20 @@ export function SmartPrediction() {
           </div>
         </div>
       )}
+      {/* Forecast Chart (Custom SVG) */}
+      <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <PredictionChartSVG 
+          data={predictionData}
+          eventAnnotations={eventAnnotations}
+          title="Prediksi Penjualan"
+        />
+      </div>
 
-      <div className="space-y-6">
-
-          {/* Forecast Chart (INTEGRATED UI/UX HERE) */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <div className="mb-6">
-              <h2 className="text-xl font-medium text-slate-900 mb-1">Prediksi Penjualan</h2>
-              <p className="text-sm text-slate-500">Data historis vs prediksi AI dengan penanda acara</p>
-            </div>
-            <ResponsiveContainer width="100%" height={400}>
-              <ComposedChart data={predictionData}>
-                <defs>
-                   <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.05}/>
-                  </linearGradient>
-                </defs>
-                
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#64748b" 
-                  tick={{ fontSize: 12 }}
-                  tickMargin={10}
-                  tickFormatter={(value) => {
-                    if (!value) return '';
-                    const date = new Date(value);
-                    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-                  }}
-                />
-                <YAxis 
-                  stroke="#64748b" 
-                  tick={{ fontSize: 12 }} 
-                  tickFormatter={(value) => {
-                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
-                    if (value >= 1000) return `${(value / 1000).toFixed(0)}rb`;
-                    return value;
-                  }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  }}
-                  formatter={(value: number) => {
-                    return new Intl.NumberFormat('id-ID', {
-                      style: 'currency',
-                      currency: 'IDR',
-                      minimumFractionDigits: 0
-                    }).format(value);
-                  }}
-                  labelFormatter={(value) => {
-                    if (!value) return '';
-                    return new Date(value).toLocaleDateString('id-ID', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    });
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                
-                {/* 2. Visual Separation: Historical (Solid) vs Predicted (Dashed/Gradient) */}
-                
-                {/* Historical: Solid Line, Smooth Curves */}
-                <Line
-                  type="monotone"
-                  dataKey="historical"
-                  stroke="#334155"
-                  strokeWidth={2.5}
-                  name="Penjualan Historis"
-                  dot={{ r: 3, fill: '#334155' }}
-                  activeDot={{ r: 6 }}
-                  connectNulls={false}
-                />
-                
-                {/* Predicted: Combined Component (Area + Line Style) - Single Component */}
-                <Area
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#4f46e5"
-                  strokeWidth={2.5}
-                  strokeDasharray="5 5"
-                  fill="url(#colorPredicted)"
-                  fillOpacity={1}
-                  name="Prediksi AI"
-                  dot={false}
-                  activeDot={{ r: 6 }}
-                  connectNulls={true}
-                />
-              
-                {/* 3. Annotations: Event Markers & Labels */}
-                {eventAnnotations.map((event, idx) => {
-                  const mainType = event.types[0] || 'event';
-                  const color = getEventCategoryColor(mainType);
-                  return (
-                    <ReferenceLine
-                      key={idx}
-                      x={event.date}
-                      stroke={color}
-                      strokeWidth={1.5}
-                      strokeDasharray="3 3"
-                      label={{
-                        value: event.titles[0],
-                        position: 'top',
-                        fill: color, // Gunakan warna event agar teks terlihat jelas
-                        fontSize: 12,
-                        fontWeight: 700,
-                        dy: -10
-                      }}
-                    />
-                  );
-                })}
-              </ComposedChart>
-            </ResponsiveContainer>
-            
-            {/* Custom Legend/Explanation for the UI Styles */}
-            <div className="mt-6 flex flex-wrap items-center gap-4 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-0.5 bg-slate-700"></div>
-                <span className="text-slate-600 text-xs">Penjualan Historis</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center">
-                   <div className="w-6 h-0.5 bg-indigo-600 border-t border-dashed"></div>
-                </div>
-                <span className="text-slate-600 text-xs">Prediksi AI</span>
-              </div>
-              <div className="w-px h-4 bg-slate-300 mx-2"></div>
-              {/* Event Legend */}
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="text-slate-600 text-xs">Promo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <span className="text-slate-600 text-xs">Holiday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                <span className="text-slate-600 text-xs">Event</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
-                <span className="text-slate-600 text-xs">Store Closed</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        {/* Two-column layout for Recommendations and Events */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Restock Recommendations */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <div className="mb-6">
+          <div className="bg-white rounded-xl p-6 border border-slate-200 flex flex-col h-[600px]">
+            <div className="mb-6 flex-shrink-0">
               <h2 className="text-xl font-medium text-slate-900 mb-1">Rekomendasi Pengisian Stok</h2>
               <p className="text-sm text-slate-500">Produk yang diprediksi akan melonjak permintaannya</p>
             </div>
@@ -984,7 +843,7 @@ export function SmartPrediction() {
             {restockAlert && restockAlert.show && (
               <Alert 
                 variant={restockAlert.type === 'success' ? 'success' : 'destructive'}
-                className="mb-4"
+                className="mb-4 flex-shrink-0"
               >
                 {restockAlert.type === 'success' ? (
                   <CheckCircle className="h-4 w-4" />
@@ -1011,119 +870,135 @@ export function SmartPrediction() {
               </Alert>
             )}
             
-            <div className="space-y-3">
-              {(!restockRecommendations || restockRecommendations.length === 0) ? (
-                <div className="text-center py-8 text-slate-500">
-                  <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                  <p>Tidak ada rekomendasi restock saat ini.</p>
-                  <p className="text-sm">Semua produk memiliki stok yang mencukupi.</p>
-                </div>
-              ) : (
-                restockRecommendations.map((item) => {
-                  if (!item || !item.productId) return null;
-                  
-                  const productId = item.productId || '';
-                  const productName = item.productName || 'Produk Tidak Diketahui';
-                  const currentStock = item.currentStock ?? 0;
-                  const predictedDemand = item.predictedDemand ?? 0;
-                  const recommendedRestock = item.recommendedRestock ?? 0;
-                  const urgency = item.urgency || 'low';
-                  const category = item.category;
-                  
-                  return (
-                    <div
-                      key={productId}
-                      className="flex items-center justify-between p-6 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-200 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-base font-medium text-slate-900">{productName}</h3>
-                          <span
-                            className={`px-3 py-1 rounded-full border text-xs font-medium ${getUrgencyColor(urgency)}`}
-                          >
-                            {urgency.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
-                          {category && (
-                            <span className="text-xs px-3 py-1 bg-white border border-slate-200 rounded-full font-medium">
-                              {category}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1">
-                            <span className="font-medium text-slate-700">Saat ini:</span> {currentStock}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="font-medium text-slate-700">Prediksi:</span> {predictedDemand}
-                          </span>
-                          <span className="text-indigo-600 font-medium flex items-center gap-1">
-                            <span className="font-medium">Isi ulang:</span> +{recommendedRestock}
-                          </span>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => handleOpenRestockModal(item)}
-                        disabled={restockingProduct === productId || recommendedRestock <= 0}
-                        className="ml-4"
+            <ScrollArea className="flex-1 -mr-2 pr-4">
+              <div className="space-y-3 pb-4">
+                {(!restockRecommendations || restockRecommendations.length === 0) ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Tidak ada rekomendasi restock saat ini.</p>
+                    <p className="text-sm">Semua produk memiliki stok yang mencukupi.</p>
+                  </div>
+                ) : (
+                  restockRecommendations.map((item) => {
+                    if (!item || !item.productId) return null;
+                    
+                    const productId = item.productId || '';
+                    const productName = item.productName || 'Produk Tidak Diketahui';
+                    const currentStock = item.currentStock ?? 0;
+                    const predictedDemand = item.predictedDemand ?? 0;
+                    const recommendedRestock = item.recommendedRestock ?? 0;
+                    const urgency = item.urgency || 'low';
+                    const category = item.category;
+                    
+                    return (
+                      <div
+                        key={productId}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-200 transition-colors gap-4"
                       >
-                        {restockingProduct === productId ? (
-                          <>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-sm font-medium text-slate-900">{productName}</h3>
+                            <span
+                              className={`px-2 py-0.5 rounded-full border text-[10px] font-medium ${getUrgencyColor(urgency)}`}
+                            >
+                              {urgency.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
+                            {category && (
+                              <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-full font-medium">
+                                {category}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <span className="font-medium text-slate-700">Stok:</span> {currentStock}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="font-medium text-slate-700">Prediksi:</span> {predictedDemand}
+                            </span>
+                            <span className="text-indigo-600 font-medium flex items-center gap-1">
+                              <span>+ {recommendedRestock}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => handleOpenRestockModal(item)}
+                          disabled={restockingProduct === productId || recommendedRestock <= 0}
+                          size="sm"
+                          className="flex-shrink-0"
+                        >
+                          {restockingProduct === productId ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Memproses...
-                          </>
-                        ) : (
-                          <>
-                            <Package className="w-4 h-4" />
-                            Isi Stok Sekarang
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                          ) : (
+                            <>
+                              <Package className="w-4 h-4 mr-2" />
+                              Isi Stok
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
           </div>
 
-          {eventAnnotations.length > 0 && (
-            <div className="bg-white rounded-xl p-6 border border-slate-200">
-              <div className="mb-6">
-                <h2 className="text-xl font-medium text-slate-900 mb-1">Jadwal Acara</h2>
-                <p className="text-sm text-slate-500">AI mempertimbangkan promosi, hari libur & acara ini dalam prediksi</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {eventAnnotations.slice(0, 6).map((event) => {
-                  const mainType = event.types[0] || 'event';
-                  return (
-                    <div 
-                      key={event.date} 
-                      className="p-4 rounded-xl border-2 bg-gradient-to-br from-white to-slate-50 hover:shadow-md transition-shadow"
-                      style={{ borderColor: getEventCategoryColor(mainType) + '40' }}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-slate-900">{event.date}</p>
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getEventCategoryColor(mainType) }}
-                        />
-                      </div>
-                      <p className="text-sm text-slate-700 font-medium mb-3">{event.titles.join(', ')}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {event.types.map((type) => (
-                          <span 
-                            key={type} 
-                            className={`text-xs px-3 py-1 rounded-full border font-medium ${getEventCategoryBadgeColor(type)}`}
-                          >
-                            {type}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Event Details */}
+          <div className="bg-white rounded-xl p-6 border border-slate-200 flex flex-col h-[600px]">
+             <div className="mb-6 flex-shrink-0">
+              <h2 className="text-xl font-medium text-slate-900 mb-1">Keterangan Event</h2>
+              <p className="text-sm text-slate-500">Mendatang sesuai kalender Anda</p>
             </div>
-          )}
+
+            <ScrollArea className="flex-1 -mr-2 pr-4">
+              <div className="grid grid-cols-1 gap-3 pb-4">
+                {events && events.length > 0 ? (
+                  events
+                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                    .map((event, index) => {
+                      const eventLabelMapping: Record<string, string> = {
+                        promotion: "Promo dadakan durasi pendek",
+                        holiday: "Hari libur nasional",
+                        event: "Event khusus",
+                        "store-closed": "Toko Tutup",
+                      };
+                      
+                      const isHoliday = event.type === 'holiday';
+                      const numberColor = isHoliday ? 'bg-red-600' : 'bg-blue-600';
+                      
+                      return (
+                        <div 
+                          key={event.id || index}
+                          className="flex items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-indigo-100 transition-all group"
+                        >
+                          <div className={`w-8 h-8 ${numberColor} text-white rounded-full flex items-center justify-center text-xs font-bold mr-4 flex-shrink-0`}>
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-semibold text-slate-900 truncate">
+                              {event.title}
+                            </h3>
+                            <p className="text-xs text-slate-500 truncate mt-0.5">
+                              {eventLabelMapping[event.type] || "Informasi event"}
+                            </p>
+                          </div>
+                          <div className="ml-4 text-[10px] font-medium text-slate-400">
+                            {new Date(event.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </div>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="text-center py-12 text-slate-500">
+                    <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Tidak ada event mendatang.</p>
+                    <p className="text-sm">Tambahkan event di menu Kalender.</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
         </div>
 
       {/* Restock Modal */}
