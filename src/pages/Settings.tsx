@@ -100,15 +100,52 @@ export function Settings() {
     }
   };
 
-  // Handle photo URL update
-  const handleUpdatePhoto = async () => {
+  // Handle photo file upload
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('File harus berupa gambar', 'error');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Ukuran file maksimal 5MB', 'error');
+      return;
+    }
+
     setPhotoLoading(true);
     try {
-      await updatePhotoURL(photoURL.trim());
-      showToast('Foto profil berhasil diubah', 'success');
-      setIsEditingPhoto(false);
-    } catch (error) {
-      showToast(getFirebaseErrorMessage(error as AuthError), 'error');
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        
+        const token = await getAuthToken();
+        const response = await fetch(`${API_BASE_URL}/users/avatar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ image: base64 }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        const result = await response.json();
+        setPhotoURL(result.avatar_url);
+        await updatePhotoURL(result.avatar_url);
+        showToast('Foto profil berhasil diubah', 'success');
+        setIsEditingPhoto(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error: any) {
+      showToast(error.message || 'Gagal mengunggah foto', 'error');
     } finally {
       setPhotoLoading(false);
     }
@@ -189,6 +226,60 @@ export function Settings() {
     }
   };
 
+  // Handle store logo file upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('File harus berupa gambar', 'error');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Ukuran file maksimal 5MB', 'error');
+      return;
+    }
+
+    setStoreLoading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result as string;
+        
+        const token = await getAuthToken();
+        const response = await fetch(`${API_BASE_URL}/settings/store/logo`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ image: base64 }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Upload failed');
+        }
+
+        const result = await response.json();
+        setStoreProfile({ ...storeProfile, logo: result.logo_url });
+        showToast('Logo toko berhasil diunggah', 'success');
+        setIsEditingLogo(false);
+      } catch (error: any) {
+        console.error('Error uploading logo:', error);
+        showToast(error.message || 'Gagal mengunggah logo', 'error');
+      } finally {
+        setStoreLoading(false);
+      }
+    };
+    reader.onerror = () => {
+      showToast('Gagal membaca file', 'error');
+      setStoreLoading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Check if user logged in with Google
   const isGoogleUser = user?.providerData?.[0]?.providerId === 'google.com';
 
@@ -261,22 +352,26 @@ export function Settings() {
             
             {isEditingPhoto && (
               <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-                <label className="block text-xs text-slate-700 mb-1">URL Foto Profil</label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={photoURL}
-                    onChange={(e) => setPhotoURL(e.target.value)}
-                    placeholder="https://example.com/photo.jpg"
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg settings-input text-sm"
-                  />
-                  <Button size="sm" onClick={handleUpdatePhoto} disabled={photoLoading}>
-                    {photoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  </Button>
+                <label className="block text-xs text-slate-700 mb-2">Upload Foto Profil</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 cursor-pointer">
+                    <div className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-indigo-400 transition-colors">
+                      <Camera className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm text-slate-600">Pilih Gambar</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {photoLoading && <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />}
                   <Button size="sm" variant="outline" onClick={() => setIsEditingPhoto(false)}>
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+                <p className="text-xs text-slate-500 mt-2">Format: JPG, PNG. Maksimal 5MB</p>
               </div>
             )}
           </div>
@@ -373,7 +468,7 @@ export function Settings() {
 
         {/* RIGHT: Store Profile - Admin Only */}
         <AdminOnly>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 min-w-[350px] w-full">
+          <div className="bg-white rounded-xl border border-slate-200 flex-1 min-w-[350px] w-full">
             {/* Store Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -389,7 +484,7 @@ export function Settings() {
             {/* Store Logo */}
             <div className="p-6 border-b border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="relative">
+                <div className="relative w-16 h-16" style={{ zIndex: 1 }}>
                   {storeProfile.logo ? (
                     <img 
                       src={storeProfile.logo} 
@@ -401,34 +496,45 @@ export function Settings() {
                       <Building className="w-8 h-8 text-green-600" />
                     </div>
                   )}
-                  <button 
-                    onClick={() => setIsEditingLogo(!isEditingLogo)}
-                    className="absolute bottom-0 right-0 p-1.5 bg-green-600 rounded-full text-white hover:bg-green-700 transition-colors"
-                  >
-                    <Camera className="w-3 h-3" />
-                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-slate-900">{storeProfile.name || 'Nama Toko'}</p>
-                  <p className="text-sm text-slate-500">Logo untuk struk & laporan</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm text-slate-500">Logo untuk struk & laporan</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-xs px-2"
+                      onClick={() => setIsEditingLogo(!isEditingLogo)}
+                    >
+                      {isEditingLogo ? 'Batal' : 'Ubah Logo'}
+                    </Button>
+                  </div>
                 </div>
               </div>
               
               {isEditingLogo && (
                 <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-                  <label className="block text-xs text-slate-700 mb-1">URL Logo Toko</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={storeProfile.logo}
-                      onChange={(e) => setStoreProfile({ ...storeProfile, logo: e.target.value })}
-                      placeholder="https://example.com/logo.jpg"
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg settings-input text-sm"
-                    />
+                  <label className="block text-xs text-slate-700 mb-2">Upload Logo Toko</label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 cursor-pointer">
+                      <div className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-green-400 transition-colors">
+                        <Camera className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm text-slate-600">Pilih Logo</span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    {storeLoading && <Loader2 className="w-5 h-5 animate-spin text-green-600" />}
                     <Button size="sm" variant="outline" onClick={() => setIsEditingLogo(false)}>
-                      <Check className="w-4 h-4" />
+                      <X className="w-4 h-4" />
                     </Button>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">Format: JPG, PNG. Maksimal 5MB. Akan tampil di struk.</p>
                 </div>
               )}
             </div>

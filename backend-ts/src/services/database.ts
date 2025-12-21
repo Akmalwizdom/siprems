@@ -1,9 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 
+// Regular client (uses anon key, subject to RLS)
 export const supabase = createClient(
     config.supabase.url,
     config.supabase.anonKey
+);
+
+// Admin client for storage operations (uses service role key, bypasses RLS)
+export const supabaseAdmin = createClient(
+    config.supabase.url,
+    config.supabase.serviceRoleKey || config.supabase.anonKey
 );
 
 // Helper function for common database operations

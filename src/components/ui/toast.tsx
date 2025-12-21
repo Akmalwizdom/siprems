@@ -60,11 +60,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+import { createPortal } from 'react-dom';
+
 function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: (id: string) => void }) {
   if (toasts.length === 0) return null;
 
-  return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+  return createPortal(
+    <div className="fixed top-4 right-4 z-[99999] flex flex-col gap-2 max-w-sm pointer-events-none">
       {toasts.map((toast) => {
         const style = toastStyles[toast.type];
         const Icon = style.icon;
@@ -72,7 +74,7 @@ function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: (id: st
         return (
           <div
             key={toast.id}
-            className={`${style.bg} ${style.color} px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-in`}
+            className={`${style.bg} ${style.color} px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-right-full duration-300 pointer-events-auto`}
             role="alert"
           >
             <Icon className="w-5 h-5 flex-shrink-0" />
@@ -87,25 +89,7 @@ function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: (id: st
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }
-
-// CSS animation untuk toast slide-in
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  @keyframes slide-in {
-    from {
-      opacity: 0;
-      transform: translateX(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-  .animate-slide-in {
-    animation: slide-in 0.3s ease-out forwards;
-  }
-`;
-document.head.appendChild(styleSheet);

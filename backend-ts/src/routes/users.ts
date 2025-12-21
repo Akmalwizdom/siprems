@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { supabase } from '../services/database';
+import { supabase, supabaseAdmin } from '../services/database';
 import { authenticate, requireAdmin, AuthenticatedRequest, UserRole } from '../middleware/auth';
 
 const router = Router();
@@ -179,6 +179,83 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
     } catch (error: any) {
         console.error('Error deleting user:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * POST /api/users/avatar
+ * Upload user avatar (profile photo)
+ */
+router.post('/avatar', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { image } = req.body; // Base64 encoded image
+
+        if (!image) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'Image data is required'
+            });
+        }
+
+        // Extract base64 data and content type
+        const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'Invalid image format. Expected base64 data URL.'
+            });
+        }
+
+        const contentType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Generate filename using user ID
+        const extension = contentType.split('/')[1] || 'jpg';
+        const filename = `avatar-${req.user!.id}-${Date.now()}.${extension}`;
+        const filePath = `avatars/${filename}`;
+
+        // Upload to Supabase Storage (using admin client to bypass RLS)
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from('user-avatars')
+            .upload(filePath, buffer, {
+                contentType,
+                upsert: true
+            });
+
+        if (uploadError) {
+            console.error('[Users] Avatar upload error:', uploadError);
+            throw uploadError;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabaseAdmin.storage
+            .from('user-avatars')
+            .getPublicUrl(filePath);
+
+        const avatarUrl = urlData.publicUrl;
+
+        // Update user with new avatar URL
+        const { data, error } = await supabase
+            .from('users')
+            .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+            .eq('id', req.user!.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({
+            status: 'success',
+            avatar_url: avatarUrl,
+            user: data
+        });
+    } catch (error: any) {
+        console.error('[Users] Error uploading avatar:', error);
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
     }
 });
 
