@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router';
 import { LayoutDashboard, ShoppingCart, Package, Brain, Settings, Calendar, X, ChevronLeft, ChevronRight, Users } from 'lucide-react';
-import { Button } from '../ui/button';
+
 import { useRole, UserRole } from '../../context/AuthContext';
 
 interface SidebarProps {
@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   { path: '/products', icon: Package, label: 'Produk' },
   { path: '/calendar', icon: Calendar, label: 'Kalender' },
   { path: '/prediction', icon: Brain, label: 'Prediksi Cerdas', allowedRoles: ['admin'] },
-  { path: '/users', icon: Users, label: 'Kelola Pengguna', allowedRoles: ['admin'], badge: 'Admin' },
+  { path: '/users', icon: Users, label: 'Kelola Pengguna', allowedRoles: ['admin'] },
   { path: '/settings', icon: Settings, label: 'Pengaturan' },
 ];
 
@@ -204,20 +204,6 @@ export function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMo
           </button>
         </div>
 
-        {/* Upgrade Card */}
-        <div className="p-4 border-t border-gray-200 lg-hide-when-collapsed">
-          <div className="bg-slate-900 rounded-xl p-4">
-            <div className="text-white mb-3">
-              <h3 className="font-semibold text-sm">Upgrade Pro</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Akses semua fitur
-              </p>
-            </div>
-            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-xs h-9">
-              Upgrade
-            </Button>
-          </div>
-        </div>
       </aside>
     </>
   );
