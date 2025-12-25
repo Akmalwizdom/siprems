@@ -56,7 +56,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
         .header-root {
           position: sticky;
           top: 0;
-          z-index: 10;
+          z-index: 50;
           background-color: white;
           /* border-bottom removed */
           padding: 1rem;

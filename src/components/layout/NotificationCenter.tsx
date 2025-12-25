@@ -214,7 +214,7 @@ export function NotificationCenter() {
                               {notification.severity === 'critical' ? 'Kritis' : 'Rendah'}
                             </span>
                             {!notification.isRead && (
-                              <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                              <span className="w-2 h-2 bg-red-500 rounded-full"></span>
                             )}
                           </div>
                           <p className="text-sm font-medium text-slate-900 mt-1 break-words">
