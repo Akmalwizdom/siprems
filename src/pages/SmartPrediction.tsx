@@ -6,14 +6,14 @@ import { useAuth } from '../context/AuthContext';
 import { apiService, type PredictionResponse, type ModelAccuracyResponse } from '../services/api';
 import { geminiService, type ChatMessage, type CommandAction } from '../services/gemini';
 import { PredictionData, RestockRecommendation } from '../types';
-import { Button } from '../components/ui/button';
-import { Alert, AlertTitle, AlertDescription } from '../components/ui/alert';
-import { RestockModal } from '../components/RestockModal';
-import { ChatBot } from '../components/ChatBot';
+import { Button } from '../components/ui/Button';
+import { Alert, AlertTitle, AlertDescription } from '../components/ui/Alert';
+import { RestockModal } from '../components/prediction/RestockModal';
+import { ChatBot } from '../components/prediction/ChatBot';
 import { AdminOnly } from '../components/auth/RoleGuard';
-import Loader from '../components/Loader';
-import { PredictionChartSVG } from '../components/PredictionChartSVG';
-import { ScrollArea } from '../components/ui/scroll-area';
+import Loader from '../components/common/Loader';
+import { PredictionChartSVG } from '../components/prediction/PredictionChartSVG';
+import { ScrollArea } from '../components/ui/ScrollArea';
 
 
 type PredictionState = 'idle' | 'loading' | 'result' | 'learning' | 'error';
@@ -94,8 +94,6 @@ export function SmartPrediction() {
       }
       
       if (result.status === 'success') {
-        console.log(`Model accuracy loaded: ${result.accuracy}% (Train MAPE: ${result.train_mape}%, Val MAPE: ${result.validation_mape}%)`);
-        console.log(`Data freshness: ${result.data_freshness?.status}, days since last: ${result.data_freshness?.days_since_last_transaction}`);
       }
     } catch (error) {
       console.error('Error fetching forecast accuracy:', error);

@@ -53,17 +53,28 @@ export async function authenticate(
                 .single();
 
             if (error || !userData) {
-                // User not found in our database, create with default role
+                // User not found in our database, create with appropriate role
                 // Firebase JWT contains 'name' and 'picture' for Google accounts
                 const displayName = payload.name || null;
                 const avatarUrl = payload.picture || null;
+
+                // Check if this is the first user (database is empty)
+                // First user automatically becomes admin (for UMKM owner)
+                const { count: userCount, error: countError } = await supabase
+                    .from('users')
+                    .select('*', { count: 'exact', head: true });
+
+                const isFirstUser = !countError && (userCount === 0 || userCount === null);
+                const assignedRole: UserRole = isFirstUser ? 'admin' : 'user';
+
+                console.log(`[Auth] Creating new user: ${email}, isFirstUser: ${isFirstUser}, role: ${assignedRole}`);
 
                 const { data: newUser, error: createError } = await supabase
                     .from('users')
                     .insert({
                         firebase_uid: userId,
                         email: email,
-                        role: 'user', // Default role
+                        role: assignedRole, // First user = admin, otherwise = user
                         display_name: displayName,
                         avatar_url: avatarUrl,
                     })

@@ -4,7 +4,7 @@ import { TrendingUp, ShoppingBag, Package, AlertCircle, Loader2, Trophy } from '
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TimeRange, DashboardMetrics, CategorySales } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 import { API_BASE_URL } from '../config';
 import { useRole } from '../context/AuthContext';
 import { AdminOnly } from '../components/auth/RoleGuard';

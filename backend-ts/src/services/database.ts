@@ -7,6 +7,14 @@ export const supabase = createClient(
     config.supabase.anonKey
 );
 
+// Check if service role key is available
+const hasServiceRoleKey = !!config.supabase.serviceRoleKey && config.supabase.serviceRoleKey.length > 0;
+if (!hasServiceRoleKey) {
+    console.warn('[Database] WARNING: SUPABASE_SERVICE_ROLE_KEY is not configured!');
+    console.warn('[Database] supabaseAdmin will fallback to anon key and RLS will apply.');
+    console.warn('[Database] This may cause INSERT operations to fail if RLS policies block them.');
+}
+
 // Admin client for storage operations (uses service role key, bypasses RLS)
 export const supabaseAdmin = createClient(
     config.supabase.url,

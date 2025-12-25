@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import { useStore, type CalendarEvent } from '../context/StoreContext';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 import { API_BASE_URL } from '../config';
 import { AdminOnly } from '../components/auth/RoleGuard';
-import { useToast } from '../components/ui/toast';
-import { ConfirmDialog } from '../components/ui/confirm-dialog';
-import { Alert, AlertDescription } from '../components/ui/alert';
+import { useToast } from '../components/ui/Toast';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Alert, AlertDescription } from '../components/ui/Alert';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -124,13 +124,10 @@ export function CalendarImproved() {
   useEffect(() => {
     const fetchHolidays = async () => {
       try {
-        console.log(`[Holidays] Fetching holidays for year ${currentYear}`);
         const response = await fetch(`${API_BASE_URL}/holidays/${currentYear}`);
         const data = await response.json();
-        console.log('[Holidays] API Response:', data);
         if (data.status === 'success') {
           setNationalHolidays(data.holidays);
-          console.log(`[Holidays] Loaded ${data.holidays.length} holidays`);
         }
       } catch (error) {
         console.error('[Holidays] Failed to fetch holidays:', error);
@@ -353,7 +350,7 @@ export function CalendarImproved() {
     // CRITICAL: Close modal (will also clear state but we did it above to be certain)
     closeModal();
     
-    console.log('[REJECT] All state cleared, no backend call made');
+
   };
 
   /**
@@ -496,8 +493,6 @@ export function CalendarImproved() {
    * - This is called on successful save or user cancellation
    */
   const closeModal = () => {
-    console.log('[CLOSE MODAL] Clearing all state');
-    
     // Atomic state reset: Clear everything at once
     setShowModal(false);
     setShowConfirmModal(false);
@@ -512,7 +507,7 @@ export function CalendarImproved() {
     setIsLoadingAI(false);
     setCalibrationHistory([]);
     
-    console.log('[CLOSE MODAL] State cleared successfully');
+
   };
 
   const getEventsForDate = (date: Date) => {

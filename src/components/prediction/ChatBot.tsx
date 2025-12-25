@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, X, Send, Loader2, Sparkles, User, Check, XCircle } from 'lucide-react';
-import { geminiService, type ChatMessage, type CommandAction } from '../services/gemini';
-import { PredictionResponse, apiService } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from './ui/toast';
+import { geminiService, type ChatMessage, type CommandAction } from '../../services/gemini';
+import { PredictionResponse, apiService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../ui/Toast';
 
 interface ChatBotProps {
   predictionData?: PredictionResponse | null;
@@ -122,18 +122,12 @@ export function ChatBot({ predictionData = null }: ChatBotProps) {
     if (!pendingAction || isConfirming) return;
 
     setIsConfirming(true);
-    console.log('[ChatBot] Starting confirm action:', pendingAction);
-    console.log('[ChatBot] PredictionData available:', !!predictionData);
-    console.log('[ChatBot] Recommendations count:', predictionData?.recommendations?.length || 0);
 
     try {
       if (pendingAction.type === 'restock' && pendingAction.quantity) {
         // ALWAYS lookup productId by name from recommendations
         // AI doesn't know real product IDs, it sends product NAME as productId
         const recommendations = predictionData?.recommendations || [];
-        console.log('[ChatBot] Recommendations available:', recommendations.length);
-        console.log('[ChatBot] ProductName from action:', pendingAction.productName);
-        console.log('[ChatBot] Available products:', recommendations.map(r => `${r.productName} (ID: ${r.productId})`));
         
         let productId: string | null = null;
         const productNameToFind = pendingAction.productName || pendingAction.productId; // AI might send name as productId
@@ -145,17 +139,14 @@ export function ChatBot({ predictionData = null }: ChatBotProps) {
           );
           if (exactMatch) {
             productId = exactMatch.productId;
-            console.log('[ChatBot] Found exact match:', exactMatch.productName, '-> ID:', productId);
           } else {
             // Try partial match
-            console.log('[ChatBot] No exact match, trying partial match for:', productNameToFind);
             const partialMatch = recommendations.find(
               (rec) => rec.productName.toLowerCase().includes(productNameToFind.toLowerCase()) ||
                        productNameToFind.toLowerCase().includes(rec.productName.toLowerCase())
             );
             if (partialMatch) {
               productId = partialMatch.productId;
-              console.log('[ChatBot] Found partial match:', partialMatch.productName, '-> ID:', productId);
             }
           }
         }
@@ -169,7 +160,6 @@ export function ChatBot({ predictionData = null }: ChatBotProps) {
 
         // Get auth token for API call
         const token = await getAuthToken();
-        console.log('[ChatBot] Calling restockProduct with:', { productId, quantity: pendingAction.quantity, hasToken: !!token });
         await apiService.restockProduct(productId, pendingAction.quantity, token || undefined);
         
         const successMessage: ChatMessage = {

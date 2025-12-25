@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Printer, Coffee } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 import { API_BASE_URL } from '../config';
 import { exportToExcel, exportToPDF, printReceipt, type TransactionExport, type TransactionDetail, type StoreProfile } from '../utils/export';
-import { useToast } from '../components/ui/toast';
+import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../context/AuthContext';
 import { AdminOnly } from '../components/auth/RoleGuard';
-import { ConfirmDialog } from '../components/ui/confirm-dialog';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 interface TransactionItem {
   product_name: string;
@@ -252,8 +252,30 @@ export function Transaction() {
     
     setLoading(true);
     try {
+      // Helper function to get local time in ISO format (GMT+7)
+      const getLocalISOString = (): string => {
+        const now = new Date();
+        // Get the local time components in WIB (GMT+7)
+        const wibOffset = 7 * 60; // +7 hours in minutes
+        const utcOffset = now.getTimezoneOffset(); // Browser's UTC offset in minutes
+        const totalOffset = wibOffset + utcOffset; // Total adjustment needed
+        
+        const wibTime = new Date(now.getTime() + totalOffset * 60 * 1000);
+        
+        // Format as ISO 8601 with explicit timezone
+        const year = wibTime.getUTCFullYear();
+        const month = String(wibTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(wibTime.getUTCDate()).padStart(2, '0');
+        const hours = String(wibTime.getUTCHours()).padStart(2, '0');
+        const minutes = String(wibTime.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(wibTime.getUTCSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+07:00`;
+      };
+      
+      const currentDate = getLocalISOString();
+      
       const transactionData = {
-        date: new Date().toISOString(),
         total_amount: total,
         payment_method: paymentMethod,
         order_types: orderType,
@@ -278,7 +300,8 @@ export function Transaction() {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save transaction');
+        console.error('Transaction error response:', errorData);
+        throw new Error(errorData.error || errorData.detail || errorData.message || 'Failed to save transaction');
       }
       
       const result = await response.json();
@@ -287,7 +310,7 @@ export function Transaction() {
       // Prepare receipt data and show print confirmation dialog
       const receiptData: TransactionDetail = {
         id: result.transaction_id || 'TRX-TEMP',
-        date: transactionData.date,
+        date: currentDate,
         total_amount: total,
         payment_method: paymentMethod,
         order_types: orderType,
@@ -684,65 +707,66 @@ function HistoryView({
           <p className="text-sm text-slate-500">Total {totalItems} transaksi</p>
         </div>
         
-        {/* Date Filter - Admin Only */}
+        {/* Date Filter and Export Buttons - Admin Only */}
         <AdminOnly>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-              <Calendar className="w-4 h-4 text-slate-500" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-sm text-slate-700 outline-none w-32"
-                placeholder="Dari tanggal"
-              />
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Date Filter */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                <Calendar className="w-4 h-4 text-slate-500" />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-sm text-slate-700 outline-none w-32"
+                  placeholder="Dari tanggal"
+                />
+              </div>
+              <span className="text-slate-400">-</span>
+              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                <Calendar className="w-4 h-4 text-slate-500" />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-sm text-slate-700 outline-none w-32"
+                  placeholder="Sampai tanggal"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  Reset
+                </Button>
+              )}
             </div>
-            <span className="text-slate-400">-</span>
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-              <Calendar className="w-4 h-4 text-slate-500" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-sm text-slate-700 outline-none w-32"
-                placeholder="Sampai tanggal"
-              />
-            </div>
-            {(startDate || endDate) && (
+            
+            {/* Export Buttons */}
+            <div className="flex gap-2">
               <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                }}
-                className="text-slate-500 hover:text-slate-700"
+                variant="outline"
+                onClick={onExportExcel}
+                className="flex items-center gap-2"
               >
-                Reset
+                <FileSpreadsheet className="w-4 h-4" />
+                Export Excel
               </Button>
-            )}
-          </div>
-        </AdminOnly>
-        
-        {/* Export Buttons - Admin Only */}
-        <AdminOnly>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={onExportExcel}
-              className="flex items-center gap-2"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Export Excel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onExportPDF}
-              className="flex items-center gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              Export PDF
-            </Button>
+              <Button
+                variant="outline"
+                onClick={onExportPDF}
+                className="flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                Export PDF
+              </Button>
+            </div>
           </div>
         </AdminOnly>
       </div>
@@ -779,23 +803,23 @@ function HistoryView({
                 </tr>
               ) : (
                 transactions.map((t: Transaction) => {
-                  // Format product names to display
+                  // Format product names to display - show only 1 product to save space
                   const productNames = t.items?.map(item => `${item.product_name} (${item.quantity}x)`) || [];
-                  const displayProducts = productNames.length > 2 
-                    ? `${productNames.slice(0, 2).join(', ')} +${productNames.length - 2} lainnya`
-                    : productNames.join(', ') || '-';
+                  const displayProducts = productNames.length > 1 
+                    ? `${productNames[0]} +${productNames.length - 1} lainnya`
+                    : productNames[0] || '-';
                   
                   return (
                     <tr key={t.id} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-6 py-4 text-slate-600">{formatDate(t.date)}</td>
-                      <td className="px-6 py-4 font-mono text-xs text-slate-500">{t.id.slice(0, 8)}...</td>
-                      <td className="px-6 py-4 text-slate-600 max-w-xs">
-                        <span className="text-sm" title={productNames.join('\n')}>
+                      <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{formatDate(t.date)}</td>
+                      <td className="px-6 py-4 font-mono text-xs text-slate-500 whitespace-nowrap">{t.id.slice(0, 8)}...</td>
+                      <td className="px-6 py-4 text-slate-600 max-w-[200px]">
+                        <span className="text-sm truncate block" title={productNames.join('\n')}>
                           {displayProducts}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 bg-slate-100 rounded-md text-xs text-slate-600 border border-slate-200">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 py-1 bg-slate-100 rounded-md text-xs text-slate-600 border border-slate-200 whitespace-nowrap">
                           {t.order_types || 'N/A'}
                         </span>
                       </td>

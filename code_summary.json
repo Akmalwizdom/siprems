@@ -1,0 +1,131 @@
+{
+    "tech_stack": [
+        "TypeScript",
+        "React",
+        "Vite",
+        "Firebase",
+        "Recharts",
+        "MUI",
+        "Lucide-React",
+        "Tailwind CSS",
+        "React Router"
+    ],
+    "features": [
+        {
+            "name": "Login Page",
+            "description": "User authentication login page with email/password form and Firebase integration",
+            "files": [
+                "src/pages/Login.tsx",
+                "src/context/AuthContext.tsx"
+            ]
+        },
+        {
+            "name": "Register Page",
+            "description": "User registration page for new account creation with store setup",
+            "files": [
+                "src/pages/Register.tsx",
+                "src/context/AuthContext.tsx"
+            ]
+        },
+        {
+            "name": "Dashboard",
+            "description": "Main dashboard showing metrics, charts for revenue, transactions, top products and categories",
+            "files": [
+                "src/pages/Dashboard.tsx",
+                "src/components/ui/Card.tsx"
+            ]
+        },
+        {
+            "name": "Products Management",
+            "description": "CRUD operations for products including add, edit, delete, search and category filtering",
+            "files": [
+                "src/pages/Products.tsx",
+                "src/services/api.ts"
+            ]
+        },
+        {
+            "name": "Transaction Management",
+            "description": "POS transaction page for creating sales, adding items to cart, and processing payments",
+            "files": [
+                "src/pages/Transaction.tsx",
+                "src/services/api.ts"
+            ]
+        },
+        {
+            "name": "Smart Prediction",
+            "description": "AI-powered stock prediction with Prophet model integration and forecasting charts",
+            "files": [
+                "src/pages/SmartPrediction.tsx",
+                "src/components/PredictionChartSVG.tsx"
+            ]
+        },
+        {
+            "name": "Calendar Events",
+            "description": "Event calendar for managing holidays, promotions and special events that affect predictions",
+            "files": [
+                "src/pages/CalendarImproved.tsx"
+            ]
+        },
+        {
+            "name": "Profile Page",
+            "description": "User profile management with avatar upload and personal information editing",
+            "files": [
+                "src/pages/Profile.tsx",
+                "src/context/AuthContext.tsx"
+            ]
+        },
+        {
+            "name": "Settings Page",
+            "description": "Store settings management including store logo, name, address and business configuration",
+            "files": [
+                "src/pages/Settings.tsx",
+                "src/services/api.ts"
+            ]
+        },
+        {
+            "name": "User Management",
+            "description": "Admin page for managing user accounts, roles and permissions",
+            "files": [
+                "src/pages/UserManagement.tsx",
+                "src/services/api.ts"
+            ]
+        },
+        {
+            "name": "ChatBot",
+            "description": "AI chatbot component using Gemini API for user assistance and insights",
+            "files": [
+                "src/components/ChatBot.tsx",
+                "src/services/gemini.ts"
+            ]
+        },
+        {
+            "name": "Authentication Context",
+            "description": "React context for managing user authentication state and session",
+            "files": [
+                "src/context/AuthContext.tsx"
+            ]
+        },
+        {
+            "name": "Sidebar Navigation",
+            "description": "Main navigation sidebar component with menu items and responsive design",
+            "files": [
+                "src/components/layout/Sidebar.tsx",
+                "src/components/layout/Layout.tsx"
+            ]
+        },
+        {
+            "name": "Header",
+            "description": "Top header component with search, notifications and user profile dropdown",
+            "files": [
+                "src/components/layout/Header.tsx"
+            ]
+        },
+        {
+            "name": "Restock Modal",
+            "description": "Modal component for restocking products with quantity input",
+            "files": [
+                "src/components/RestockModal.tsx"
+            ]
+        }
+    ]
+}

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { User, Camera, Lock, LogOut, Loader2, Check, X, Mail, Building, Phone, MapPin, Save } from 'lucide-react';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 import { useAuth, getFirebaseErrorMessage } from '../context/AuthContext';
-import { useToast } from '../components/ui/toast';
+import { useToast } from '../components/ui/Toast';
 import { AuthError } from 'firebase/auth';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { API_BASE_URL } from '../config';
@@ -336,7 +336,7 @@ export function Settings() {
                 )}
                 <button 
                   onClick={() => setIsEditingPhoto(!isEditingPhoto)}
-                  className="absolute bottom-0 right-0 p-1.5 bg-indigo-600 rounded-full text-white hover:bg-indigo-700 transition-colors"
+                  className="absolute -bottom-1 -right-1 p-1.5 bg-indigo-600 rounded-full text-white hover:bg-indigo-700 transition-colors shadow-md border-2 border-white"
                 >
                   <Camera className="w-3 h-3" />
                 </button>
@@ -472,7 +472,7 @@ export function Settings() {
             {/* Store Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <Building className="w-5 h-5 text-green-600" />
+                <Building className="w-5 h-5 text-indigo-600" />
                 Profil Toko
               </h2>
               <Button size="sm" onClick={handleSaveStoreProfile} disabled={storeLoading}>
@@ -492,24 +492,20 @@ export function Settings() {
                       className="w-16 h-16 rounded-lg object-cover border-2 border-slate-200"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-lg bg-green-100 flex items-center justify-center border-2 border-dashed border-slate-300">
-                      <Building className="w-8 h-8 text-green-600" />
+                    <div className="w-16 h-16 rounded-lg bg-indigo-100 flex items-center justify-center border-2 border-dashed border-slate-300">
+                      <Building className="w-8 h-8 text-indigo-600" />
                     </div>
                   )}
+                  <button 
+                    onClick={() => setIsEditingLogo(!isEditingLogo)}
+                    className="absolute -bottom-1 -right-1 p-1.5 bg-indigo-600 rounded-full text-white hover:bg-indigo-700 transition-colors shadow-md border-2 border-white"
+                  >
+                    <Camera className="w-3 h-3" />
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-slate-900">{storeProfile.name || 'Nama Toko'}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-sm text-slate-500">Logo untuk struk & laporan</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-7 text-xs px-2"
-                      onClick={() => setIsEditingLogo(!isEditingLogo)}
-                    >
-                      {isEditingLogo ? 'Batal' : 'Ubah Logo'}
-                    </Button>
-                  </div>
+                  <p className="text-sm text-slate-500 mt-1">Logo untuk struk & laporan</p>
                 </div>
               </div>
               
@@ -518,7 +514,7 @@ export function Settings() {
                   <label className="block text-xs text-slate-700 mb-2">Upload Logo Toko</label>
                   <div className="flex items-center gap-2">
                     <label className="flex-1 cursor-pointer">
-                      <div className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-green-400 transition-colors">
+                      <div className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-indigo-400 transition-colors">
                         <Camera className="w-4 h-4 text-slate-500" />
                         <span className="text-sm text-slate-600">Pilih Logo</span>
                       </div>
@@ -529,7 +525,7 @@ export function Settings() {
                         className="hidden"
                       />
                     </label>
-                    {storeLoading && <Loader2 className="w-5 h-5 animate-spin text-green-600" />}
+                    {storeLoading && <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />}
                     <Button size="sm" variant="outline" onClick={() => setIsEditingLogo(false)}>
                       <X className="w-4 h-4" />
                     </Button>

@@ -2,7 +2,7 @@ import { Bell, Search, Settings, LogOut, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { Button } from '../ui/button';
+import { Button } from '../ui/Button';
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -116,7 +116,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
       
       <header className="header-root">
         <div className="flex items-center justify-between">
-          {/* Left section - Mobile menu & Search */}
+          {/* Left section - Mobile menu */}
           <div className="flex items-center gap-4 flex-1">
             {/* Mobile Menu Button */}
             <button
@@ -125,30 +125,10 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
             >
               <Menu className="w-6 h-6" />
             </button>
-            
-            {/* Search */}
-            <div className="relative flex-1 max-w-xl hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari produk, transaksi..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
           </div>
 
-          {/* Right section - Notifications & Profile */}
+          {/* Right section - Profile */}
           <div className="flex items-center gap-2 lg:gap-4">
-            {/* Mobile Search Button */}
-            <Button variant="ghost" size="icon" className="sm:hidden">
-              <Search className="w-5 h-5 text-slate-600" />
-            </Button>
-
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5 text-slate-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </Button>
-
             <div className="relative pl-2 lg:pl-4" ref={dropdownRef}>
               <div 
                 className="flex items-center gap-2 lg:gap-3 cursor-pointer"

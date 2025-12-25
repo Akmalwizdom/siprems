@@ -2,7 +2,7 @@ import { RouterProvider } from 'react-router';
 import { router } from './utils/routes';
 import { StoreProvider } from './context/StoreContext';
 import { AuthProvider } from './context/AuthContext';
-import { ToastProvider } from './components/ui/toast';
+import { ToastProvider } from './components/ui/Toast';
 
 export default function App() {
   return (

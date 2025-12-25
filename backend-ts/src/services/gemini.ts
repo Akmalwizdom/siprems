@@ -112,38 +112,159 @@ Pastikan category adalah SALAH SATU dari: promotion, holiday, store-closed, even
         let contextInfo = '';
         let hasRecommendations = false;
 
-        if (predictionData && predictionData.recommendations && predictionData.recommendations.length > 0) {
-            hasRecommendations = true;
-            const recommendations = predictionData.recommendations
-                .slice(0, 10)
-                .map((r: any, idx: number) => `${idx + 1}. ${r.productName} (kategori: ${r.category || 'N/A'}) - stok saat ini: ${r.currentStock} unit, prediksi kebutuhan: ${r.predictedDemand} unit, rekomendasi restock: ${r.recommendedRestock} unit, urgensi: ${r.urgency}`)
-                .join('\n');
+        if (predictionData) {
+            // Process recommendations data
+            if (predictionData.recommendations && predictionData.recommendations.length > 0) {
+                hasRecommendations = true;
+                const recommendations = predictionData.recommendations
+                    .slice(0, 10)
+                    .map((r: any, idx: number) => `${idx + 1}. ${r.productName} (kategori: ${r.category || 'N/A'}) - stok saat ini: ${r.currentStock} unit, prediksi kebutuhan: ${r.predictedDemand} unit, rekomendasi restock: ${r.recommendedRestock} unit, urgensi: ${r.urgency}`)
+                    .join('\n');
 
-            console.log('[Gemini] Recommendations data received:');
-            console.log(recommendations);
+                console.log('[Gemini] Recommendations data received:');
+                console.log(recommendations);
 
-            contextInfo = `
+                contextInfo += `
 
 === DATA REKOMENDASI RESTOCK AKTUAL DARI SISTEM ===
 ${recommendations}
-=== AKHIR DATA ===
+=== AKHIR DATA REKOMENDASI ===
+`;
+            }
 
-PENTING: Data di atas adalah satu-satunya produk yang valid. JANGAN mengarang atau menyebutkan produk lain yang tidak ada dalam daftar di atas.`;
+            // Process chart data for sales prediction insights
+            if (predictionData.chartData && predictionData.chartData.length > 0) {
+                const chartData = predictionData.chartData;
+
+                // Find peak and low prediction dates
+                const predictedData = chartData.filter((d: any) => d.predicted != null && d.predicted > 0);
+                if (predictedData.length > 0) {
+                    const sortedByPredicted = [...predictedData].sort((a: any, b: any) => (b.predicted || 0) - (a.predicted || 0));
+                    const peakDay = sortedByPredicted[0];
+                    const lowDay = sortedByPredicted[sortedByPredicted.length - 1];
+
+                    // Calculate totals and averages
+                    const totalPredicted = predictedData.reduce((sum: number, d: any) => sum + (d.predicted || 0), 0);
+                    const avgPredicted = Math.round(totalPredicted / predictedData.length);
+
+                    // Find holiday dates
+                    const holidayDates = chartData.filter((d: any) => d.isHoliday).map((d: any) => `${d.date} (${d.holidayName || 'Hari Libur'})`);
+
+                    // Format currency helper
+                    const formatRupiah = (value: number) => `Rp ${value.toLocaleString('id-ID')}`;
+
+                    contextInfo += `
+
+=== RINGKASAN PREDIKSI PENJUALAN (dalam Rupiah) ===
+Periode Prediksi: ${predictedData.length} hari
+Tanggal Prediksi Tertinggi: ${peakDay.date} dengan estimasi penjualan ${formatRupiah(Math.round(peakDay.predicted))}
+Tanggal Prediksi Terendah: ${lowDay.date} dengan estimasi penjualan ${formatRupiah(Math.round(lowDay.predicted))}
+Total Prediksi Penjualan: ${formatRupiah(Math.round(totalPredicted))}
+Rata-rata Penjualan Harian: ${formatRupiah(avgPredicted)}
+${holidayDates.length > 0 ? `Hari Libur dalam Periode: ${holidayDates.slice(0, 5).join(', ')}${holidayDates.length > 5 ? ` dan ${holidayDates.length - 5} lainnya` : ''}` : 'Tidak ada hari libur dalam periode prediksi'}
+
+CATATAN PENTING: Nilai prediksi adalah dalam RUPIAH (pendapatan/penjualan), BUKAN dalam unit/jumlah barang.
+=== AKHIR RINGKASAN PREDIKSI ===
+`;
+                }
+            }
+
+            // Process event annotations with impact explanations
+            if (predictionData.eventAnnotations && predictionData.eventAnnotations.length > 0) {
+                const eventList = predictionData.eventAnnotations
+                    .slice(0, 15)
+                    .map((e: any) => {
+                        const types = e.types || [];
+                        let impactExplanation = '';
+
+                        // Explain impact based on event type
+                        if (types.includes('store-closed')) {
+                            impactExplanation = ' → Prediksi SANGAT RENDAH karena toko tutup';
+                        } else if (types.includes('holiday')) {
+                            impactExplanation = ' → Biasanya penjualan TURUN karena hari libur nasional (banyak orang berkumpul di rumah)';
+                        } else if (types.includes('promotion')) {
+                            impactExplanation = ' → Prediksi NAIK karena ada promosi/diskon';
+                        } else if (types.includes('event')) {
+                            impactExplanation = ' → Bisa berdampak pada penjualan tergantung jenis acara';
+                        }
+
+                        return `- ${e.date}: ${e.titles.join(', ')} (${types.join(', ')})${impactExplanation}`;
+                    })
+                    .join('\n');
+
+                contextInfo += `
+
+=== EVENT/ACARA DAN DAMPAKNYA TERHADAP PREDIKSI ===
+Berikut adalah event yang mempengaruhi prediksi penjualan:
+${eventList}
+
+PENJELASAN DAMPAK EVENT:
+- HARI LIBUR NASIONAL (seperti Natal, Lebaran, Tahun Baru): Biasanya penjualan cenderung TURUN karena banyak orang merayakan di rumah atau berkumpul dengan keluarga, sehingga traffic ke toko berkurang.
+- PROMOSI/DISKON: Penjualan biasanya NAIK karena ada daya tarik harga khusus.
+- TOKO TUTUP: Prediksi akan SANGAT RENDAH atau NOL karena tidak ada operasional.
+- EVENT UMUM: Dampak bervariasi tergantung jenis acara.
+=== AKHIR DATA EVENT ===
+`;
+            }
+
+            // Process metadata
+            if (predictionData.meta) {
+                const meta = predictionData.meta;
+                const accuracyInfo = meta.accuracy != null ? `${meta.accuracy}%` : 'N/A';
+                const growthFactor = meta.applied_factor != null ? `${((meta.applied_factor - 1) * 100).toFixed(1)}%` : 'N/A';
+                const forecastDays = meta.forecastDays || 'N/A';
+
+                let freshnessInfo = '';
+                if (meta.data_freshness) {
+                    freshnessInfo = `Status Data: ${meta.data_freshness.status}, ${meta.data_freshness.days_since_last_data || '?'} hari sejak data terakhir`;
+                }
+
+                contextInfo += `
+
+=== INFORMASI MODEL PREDIKSI ===
+Akurasi Model: ${accuracyInfo}
+Faktor Pertumbuhan: ${growthFactor}
+Jumlah Hari Prediksi: ${forecastDays}
+${freshnessInfo}
+${meta.warning ? `Peringatan: ${meta.warning}` : ''}
+=== AKHIR INFORMASI MODEL ===
+`;
+            }
+
+            if (!hasRecommendations) {
+                contextInfo += `
+CATATAN: Tidak ada data rekomendasi restock spesifik, namun data prediksi penjualan tersedia untuk analisis.`;
+            }
         } else {
-            console.log('[Gemini] No recommendations data received');
+            console.log('[Gemini] No prediction data received');
             contextInfo = `
-CATATAN: Saat ini tidak ada data rekomendasi restock yang tersedia. Jika user bertanya tentang restock, minta mereka untuk menjalankan prediksi terlebih dahulu.`;
+CATATAN: Saat ini tidak ada data prediksi yang tersedia. Jika user bertanya tentang prediksi atau restock, minta mereka untuk menjalankan prediksi terlebih dahulu di halaman Smart Prediction.`;
         }
 
         const systemPrompt = `Kamu adalah asisten AI cerdas untuk sistem manajemen inventaris SIPREMS.
 Tugasmu membantu user mengelola stok dan memahami prediksi permintaan dengan gaya profesional, ramah, dan informatif.
 ${contextInfo}
 
+KEMAMPUAN INSIGHT PREDIKSI:
+Kamu memiliki akses ke data prediksi lengkap yang mencakup:
+1. REKOMENDASI RESTOCK - Daftar produk yang perlu di-restock beserta urgensinya
+2. RINGKASAN PREDIKSI PENJUALAN - Tanggal puncak/terendah penjualan, total dan rata-rata prediksi
+3. EVENT/ACARA - Hari libur dan event yang mempengaruhi prediksi
+4. INFORMASI MODEL - Akurasi prediksi dan faktor pertumbuhan
+
+CONTOH PERTANYAAN YANG BISA DIJAWAB:
+- "Kapan prediksi penjualan tertinggi?" -> Gunakan data RINGKASAN PREDIKSI
+- "Apa dampak hari libur terhadap penjualan?" -> Gunakan data EVENT dan hari libur dalam RINGKASAN
+- "Bagaimana tren penjualan bulan depan?" -> Gunakan rata-rata dan total prediksi
+- "Berapa akurasi prediksi saat ini?" -> Gunakan INFORMASI MODEL
+- "Produk apa yang perlu di-restock?" -> Gunakan DATA REKOMENDASI RESTOCK
+
 ATURAN KRITIS (WAJIB DIIKUTI):
-- HANYA gunakan nama produk yang ada dalam DATA REKOMENDASI RESTOCK di atas
+- HANYA gunakan nama produk yang ada dalam DATA REKOMENDASI RESTOCK
 - JANGAN PERNAH mengarang atau menyebutkan nama produk yang tidak ada dalam data
-- Jika tidak ada data rekomendasi, katakan dengan jelas bahwa data belum tersedia
+- Jika tidak ada data, katakan dengan jelas bahwa user perlu menjalankan prediksi terlebih dahulu
 - Semua informasi stok, prediksi, dan rekomendasi HARUS diambil dari data yang diberikan
+- Untuk pertanyaan tentang tren/insight, gunakan RINGKASAN PREDIKSI dan INFORMASI MODEL
 
 ATURAN GAYA PENULISAN:
 - Gunakan bahasa Indonesia yang natural dan profesional
@@ -153,11 +274,11 @@ ATURAN GAYA PENULISAN:
 - Jawab langsung dan to-the-point
 - Gunakan emoji secukupnya untuk membuat respons lebih friendly (maksimal 2 per respons)
 
-CONTOH RESPONS YANG BENAR (AMBIL DARI DATA YANG ADA):
-"Berdasarkan data rekomendasi sistem, ada beberapa produk yang perlu diperhatikan. Pertama adalah Coconut Latte dengan stok 113 unit dan prediksi kebutuhan 657 unit, kemudian Sparkling Yuzu Ade dengan stok 116 unit. Saya sarankan untuk segera melakukan restock pada produk-produk tersebut."
-
-CONTOH YANG SALAH (JANGAN SEPERTI INI - mengarang produk):
-"Berikut adalah Kopi Espresso Blend dengan stok 15 kg..." <- SALAH karena mengarang nama produk
+CONTOH RESPONS YANG BENAR:
+1. Tentang restock: "Berdasarkan data rekomendasi sistem, ada beberapa produk yang perlu diperhatikan. Pertama adalah Coconut Latte dengan stok 113 unit dan prediksi kebutuhan 657 unit."
+2. Tentang prediksi penjualan: "Prediksi penjualan tertinggi diperkirakan pada tanggal 5 Januari dengan estimasi Rp 25.000.000. Sementara tanggal 25 Desember diprediksi lebih rendah sekitar Rp 21.000.000 karena bertepatan dengan hari Natal di mana banyak orang merayakan di rumah. 📉"
+3. Tentang tren: "Berdasarkan data prediksi untuk 30 hari ke depan, rata-rata penjualan harian diperkirakan sekitar Rp 22.000.000 dengan total prediksi Rp 660.000.000."
+4. Tentang mengapa prediksi turun: "Prediksi penjualan pada tanggal tersebut lebih rendah karena bertepatan dengan hari libur nasional. Berdasarkan data historis, saat hari libur besar seperti Natal atau Lebaran, traffic ke toko cenderung berkurang karena masyarakat merayakan di rumah bersama keluarga."
 
 Jika user meminta untuk melakukan restock produk, berikan respons dalam format JSON dengan action.
 Jika bukan permintaan aksi, berikan respons normal saja.

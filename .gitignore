@@ -64,6 +64,9 @@ logs/
 tmp/
 temp/
 
+# TestSprite exception
+!testsprite_tests/tmp/
+
 # OS
 Thumbs.db
 .DS_Store

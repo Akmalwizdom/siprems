@@ -36,14 +36,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration = 3000) => {
-    console.log('[Toast] showToast called:', { message, type, duration });
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newToast: Toast = { id, message, type, duration };
     
-    setToasts((prev) => {
-      console.log('[Toast] Adding toast, current count:', prev.length);
-      return [...prev, newToast];
-    });
+    setToasts((prev) => [...prev, newToast]);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -67,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 import { createPortal } from 'react-dom';
 
 function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: (id: string) => void }) {
-  console.log('[Toast] ToastContainer render, toasts count:', toasts.length);
+
   
   if (toasts.length === 0) return null;
 
@@ -79,7 +75,7 @@ function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: (id: st
       {toasts.map((toast) => {
         const style = toastStyles[toast.type];
         const Icon = style.icon;
-        console.log('[Toast] Rendering toast:', toast.id, toast.message);
+
         
         return (
           <div

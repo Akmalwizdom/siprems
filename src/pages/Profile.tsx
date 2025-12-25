@@ -5,7 +5,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { useNavigate } from 'react-router';
 import { User, LogOut, Save, Camera, Loader2, Mail, Upload } from 'lucide-react';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 
 export function Profile() {
   const { user, logout } = useAuth();

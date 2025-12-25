@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router';
 import { LayoutDashboard, ShoppingCart, Package, Brain, Settings, Calendar, X, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 import { useRole, UserRole } from '../../context/AuthContext';
+import { API_BASE_URL } from '../../config';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -30,6 +32,26 @@ const navItems: NavItem[] = [
 
 export function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMobile }: SidebarProps) {
   const { role } = useRole();
+  const [storeLogo, setStoreLogo] = useState<string>('');
+
+  // Fetch store logo on mount
+  useEffect(() => {
+    const fetchStoreLogo = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/settings/store`);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.status === 'success' && result.data?.logo_url) {
+            setStoreLogo(result.data.logo_url);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching store logo:', error);
+      }
+    };
+    fetchStoreLogo();
+  }, []);
+
   return (
     <>
       <style>{`
@@ -134,12 +156,19 @@ export function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMo
         {/* Header */}
         <div className="p-4 flex items-center justify-between h-16 flex-shrink-0">
           <div className="flex items-center gap-3 lg-center-when-collapsed">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">S</span>
-            </div>
+            {storeLogo ? (
+              <img 
+                src={storeLogo} 
+                alt="Store Logo" 
+                className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-base">S</span>
+              </div>
+            )}
             <div className="overflow-hidden lg-hide-when-collapsed">
-              <h1 className="text-slate-900 font-semibold text-sm whitespace-nowrap">SIPREMS</h1>
-              <p className="text-[10px] text-slate-500 whitespace-nowrap">Smart POS System</p>
+              <h1 className="text-slate-900 font-semibold text-sm whitespace-nowrap">Siprems</h1>
             </div>
           </div>
           {/* Mobile Close Button */}

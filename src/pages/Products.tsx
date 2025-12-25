@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRight, Coffee } from 'lucide-react';
 import { Product } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/button';
+import { Button } from '../components/ui/Button';
 import { API_BASE_URL } from '../config';
 import { AdminOnly } from '../components/auth/RoleGuard';
-import { ConfirmDialog } from '../components/ui/confirm-dialog';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../components/ui/toast';
+import { useToast } from '../components/ui/Toast';
 
 export function Products() {
   const { getAuthToken } = useAuth();

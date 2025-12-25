@@ -65,7 +65,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 break;
         }
 
-        console.log(`[Dashboard] Metrics range=${range}: currentStart=${currentStart}, currentEnd=${currentEnd}, previousStart=${previousStart}, previousEnd=${previousEnd}`);
+
 
         // Fetch current period data using pagination to bypass 1000 row limit
         let currentRevenue = 0;
@@ -92,7 +92,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
         currentRevenue = allCurrentTx.reduce((sum, t) => sum + (t.total_amount || 0), 0);
         currentTransactions = allCurrentTx.length;
         currentItems = allCurrentTx.reduce((sum, t) => sum + (t.items_count || 0), 0);
-        console.log(`[Dashboard] Current period: ${currentTransactions} transactions, revenue: ${currentRevenue}`);
+
 
         // Get previous period metrics using same approach
         let previousRevenue = 0;
@@ -120,7 +120,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
         previousTransactions = allPreviousTx.length;
         previousItems = allPreviousTx.reduce((sum, t) => sum + (t.items_count || 0), 0);
 
-        console.log(`[Dashboard] Previous period: ${previousTransactions} transactions`);
+
 
         // Calculate percentage changes
         const revenueChange = previousRevenue > 0
@@ -268,7 +268,7 @@ router.get('/today', async (req: Request, res: Response) => {
         const todayStartISO = todayStart.toISOString();
         const todayEndISO = todayEnd.toISOString();
 
-        console.log(`[Dashboard] Today range: ${todayStartISO} to ${todayEndISO}`);
+
 
         // Get today's transactions using proper timestamp range
         const { data: todayTx, error: txError } = await supabase
@@ -337,3 +337,4 @@ router.get('/today', async (req: Request, res: Response) => {
 });
 
 export default router;
+
