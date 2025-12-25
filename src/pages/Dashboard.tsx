@@ -119,7 +119,7 @@ export function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-lg" style={{ backgroundColor: '#3457D5' }}>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: '#10B981' }}>
               <TrendingUp className="w-6 h-6 text-white" />
             </div>
             <span className={`${displayMetrics.revenueChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
@@ -133,7 +133,7 @@ export function Dashboard() {
 
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-lg" style={{ backgroundColor: '#8A2BE2' }}>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: '#6366F1' }}>
               <ShoppingBag className="w-6 h-6 text-white" />
             </div>
             <span className={`${displayMetrics.transactionsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
@@ -147,7 +147,7 @@ export function Dashboard() {
 
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-lg" style={{ backgroundColor: '#6F00FF' }}>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: '#F59E0B' }}>
               <Package className="w-6 h-6 text-white" />
             </div>
             <span className={`${displayMetrics.itemsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
@@ -426,9 +426,9 @@ export function Dashboard() {
               const criticalPercent = Math.round((criticalProducts.length / totalProducts) * 100);
               
               const stockHealthData = [
-                { name: 'Sehat', value: healthyPercent, color: '#3457D5', count: healthyProducts.length },
-                { name: 'Rendah', value: lowPercent, color: '#8A2BE2', count: lowProducts.length },
-                { name: 'Kritis', value: criticalPercent, color: '#4B61D1', count: criticalProducts.length },
+                { name: 'Sehat', value: healthyPercent, color: '#10B981', count: healthyProducts.length },
+                { name: 'Rendah', value: lowPercent, color: '#F59E0B', count: lowProducts.length },
+                { name: 'Kritis', value: criticalPercent, color: '#EF4444', count: criticalProducts.length },
               ].filter(d => d.value > 0);
 
               return (

@@ -733,13 +733,7 @@ export function SmartPrediction() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className={`bg-white rounded-xl p-6 border ${dataFreshnessWarning ? 'border-amber-300' : 'border-slate-200'}`}>
             <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg ${
-                dataFreshnessWarning 
-                  ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                  : accuracyDetails?.fit_status === 'good' 
-                    ? 'bg-gradient-to-br from-green-500 to-emerald-600' 
-                    : 'bg-gradient-to-br from-yellow-500 to-orange-600'
-              }`}>
+              <div className="p-3 rounded-lg" style={{ backgroundColor: dataFreshnessWarning ? '#F59E0B' : accuracyDetails?.fit_status === 'good' ? '#10B981' : '#EAB308' }}>
                 {dataFreshnessWarning ? (
                   <AlertTriangle className="w-6 h-6 text-white" />
                 ) : (
@@ -782,7 +776,7 @@ export function SmartPrediction() {
             return (
               <div className="bg-white rounded-xl p-6 border border-slate-200">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                  <div className="p-3 rounded-lg" style={{ backgroundColor: '#6366F1' }}>
                     <TrendingUp className="w-6 h-6 text-white" />
                   </div>
                   <span className={`text-sm font-medium ${isPositive ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
@@ -800,7 +794,7 @@ export function SmartPrediction() {
 
           <div className="bg-white rounded-xl p-6 border border-slate-200">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg">
+              <div className="p-3 rounded-lg" style={{ backgroundColor: '#EF4444' }}>
                 <AlertTriangle className="w-6 h-6 text-white" />
               </div>
               <span className="text-sm font-medium text-red-600 bg-red-50 px-3 py-1 rounded-full">

@@ -197,7 +197,23 @@ export function Settings() {
   const handleSaveStoreProfile = async () => {
     setStoreLoading(true);
     try {
-      const token = await getAuthToken();
+      // Get auth token with validation
+      let token: string | null = null;
+      try {
+        token = await getAuthToken();
+      } catch (authError) {
+        console.error('Auth token error:', authError);
+        showToast('Sesi Anda telah berakhir. Silakan login ulang.', 'error');
+        setStoreLoading(false);
+        return;
+      }
+
+      if (!token) {
+        showToast('Anda harus login untuk menyimpan pengaturan', 'error');
+        setStoreLoading(false);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/settings/store`, {
         method: 'PUT',
         headers: {
@@ -212,15 +228,24 @@ export function Settings() {
         })
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to save store profile');
+        throw new Error(result.error || result.message || 'Failed to save store profile');
       }
 
+      // Success - always show toast
       showToast('Profil toko berhasil disimpan', 'success');
     } catch (error: any) {
       console.error('Error saving store profile:', error);
-      showToast(error.message || 'Gagal menyimpan profil toko', 'error');
+      // Provide more specific error messages
+      let errorMessage = 'Gagal menyimpan profil toko';
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+        errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
+      }
+      showToast(errorMessage, 'error');
     } finally {
       setStoreLoading(false);
     }
