@@ -257,7 +257,7 @@ export function Register() {
           <div className="auth-footer">
             <p>
               Sudah punya akun?{' '}
-              <Link to="/" className="footer-link">
+              <Link to="/login" className="footer-link">
                 Masuk
               </Link>
             </p>

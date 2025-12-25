@@ -17,7 +17,7 @@ export const router = createBrowserRouter([
   {
     element: <GuestRoute />,
     children: [
-      { path: '/', Component: Login },
+      { path: '/login', Component: Login },
       { path: '/register', Component: Register },
     ],
   },
@@ -41,6 +41,6 @@ export const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <Navigate to="/" replace />,
+    element: <Navigate to="/login" replace />,
   },
 ]);
