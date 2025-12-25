@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2, TrendingUp, AlertTriangle, MessageSquare, Send, ChevronRight, Calendar, Package, TrendingDown, CheckCircle, Clock } from 'lucide-react';
 import { LineChart, Line, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts';
 import { useStore } from '../context/StoreContext';
@@ -14,6 +14,7 @@ import { AdminOnly } from '../components/auth/RoleGuard';
 import Loader from '../components/common/Loader';
 import { PredictionChartSVG } from '../components/prediction/PredictionChartSVG';
 import { ScrollArea } from '../components/ui/ScrollArea';
+import { usePrediction } from '../hooks';
 
 
 type PredictionState = 'idle' | 'loading' | 'result' | 'learning' | 'error';
@@ -22,8 +23,13 @@ type PredictionRange = 7 | 30 | 90;
 export function SmartPrediction() {
   const { events } = useStore();
   const { getAuthToken } = useAuth();
-  const [state, setState] = useState<PredictionState>('idle');
   const [predictionRange, setPredictionRange] = useState<PredictionRange>(30);
+  
+  // Use cached prediction hook
+  const { cachedData, hasCachedData, isRunning, runPrediction, updateRecommendations } = usePrediction(predictionRange);
+  
+  // Derive state from cache
+  const [state, setState] = useState<PredictionState>('idle');
   const [predictionData, setPredictionData] = useState<PredictionData[]>([]);
   const [restockRecommendations, setRestockRecommendations] = useState<RestockRecommendation[]>([]);
   const [predictionMeta, setPredictionMeta] = useState<PredictionResponse['meta'] | null>(null);
@@ -44,6 +50,20 @@ export function SmartPrediction() {
   const [pendingAction, setPendingAction] = useState<CommandAction | null>(null);
   const [isConfirmLoading, setIsConfirmLoading] = useState(false);
   
+  // Restore cached data when available
+  useEffect(() => {
+    if (hasCachedData && cachedData) {
+      setPredictionData(cachedData.predictionData);
+      setRestockRecommendations(cachedData.restockRecommendations);
+      setPredictionMeta(cachedData.predictionMeta);
+      setEventAnnotations(cachedData.eventAnnotations);
+      setDataFreshnessWarning(cachedData.dataFreshnessWarning);
+      setForecastAccuracy(cachedData.forecastAccuracy);
+      setAccuracyDetails(cachedData.accuracyDetails);
+      setState('result');
+    }
+  }, [hasCachedData, cachedData, predictionRange]);
+  
   // Restock Alert State
   const [restockAlert, setRestockAlert] = useState<{
     show: boolean;
@@ -55,6 +75,7 @@ export function SmartPrediction() {
   // Restock Modal State
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [selectedRestockProduct, setSelectedRestockProduct] = useState<RestockRecommendation | null>(null);
+
 
   const handleOpenRestockModal = (item: RestockRecommendation) => {
     setSelectedRestockProduct(item);
@@ -109,56 +130,32 @@ export function SmartPrediction() {
     
     // Handle case where event object is accidentally passed
     const daysToUse = (typeof days === 'number' ? days : predictionRange);
+    
+    // Update prediction range if different
+    if (typeof days === 'number' && days !== predictionRange) {
+      setPredictionRange(days);
+    }
 
     try {
-      // Convert StoreContext events to API format
-      const impactDefaults: Record<string, number> = {
-        promotion: 0.4,
-        holiday: 0.9,
-        event: 0.5,
-        'store-closed': 1,
-      };
-
-      const apiEvents = events.map(event => ({
-        date: event.date,
-        type: event.type,
-        title: event.title,
-        impact: event.impact ?? impactDefaults[event.type] ?? 0.3,
-      }));
-
-      // Get auth token for authenticated API call
-      const token = await getAuthToken();
+      // Use the cached runPrediction hook
+      const result = await runPrediction();
       
-      // Call the API with days parameter and auth token
-      const response = await apiService.getPrediction('store_1', apiEvents, undefined, daysToUse, token || undefined);
+      if (result) {
+        setPredictionData(result.predictionData);
+        setRestockRecommendations(result.restockRecommendations);
+        setPredictionMeta(result.predictionMeta);
+        setEventAnnotations(result.eventAnnotations);
+        setDataFreshnessWarning(result.dataFreshnessWarning);
+        setForecastAccuracy(result.forecastAccuracy);
+        setAccuracyDetails(result.accuracyDetails);
 
-      if (response.status === 'success') {
-        setPredictionData(response.chartData);
-        setRestockRecommendations(response.recommendations);
-        setPredictionMeta(response.meta);
-        setEventAnnotations(response.eventAnnotations || []);
-
-        // Check for data freshness warning from prediction response
-        if (response.meta?.warning) {
-          setDataFreshnessWarning(response.meta.warning);
-        } else if (response.meta?.data_freshness?.status === 'stale' || response.meta?.data_freshness?.status === 'very_stale') {
-          const days = response.meta.data_freshness.days_since_last_data;
-          setDataFreshnessWarning(`Data tidak segar - ${days} hari sejak transaksi terakhir. Prediksi telah disesuaikan.`);
-        } else {
-          setDataFreshnessWarning(null);
-        }
-
-        // Fetch forecast accuracy from dedicated backend endpoint
-        await fetchForecastAccuracy();
-
-        // Update chatbot with insights - with safety checks
-        const firstHoliday = response.chartData?.find?.(d => d.isHoliday);
-        const factorInfo = response.meta?.applied_factor ? response.meta.applied_factor.toFixed(2) : '1.00';
+        // Update chatbot with insights
+        const firstHoliday = result.predictionData?.find?.(d => d.isHoliday);
+        const factorInfo = result.predictionMeta?.applied_factor ? result.predictionMeta.applied_factor.toFixed(2) : '1.00';
         
-        // Include data freshness warning in initial message if present
         let initialMessage = '';
-        if (response.meta?.data_freshness?.status === 'stale' || response.meta?.data_freshness?.status === 'very_stale') {
-          initialMessage = `⚠️ Data tidak segar (${response.meta.data_freshness.days_since_last_data} hari sejak transaksi terakhir). Prediksi telah disesuaikan ke bawah. `;
+        if (result.dataFreshnessWarning) {
+          initialMessage = `⚠️ ${result.dataFreshnessWarning} `;
         }
         
         initialMessage += firstHoliday
@@ -345,6 +342,9 @@ export function SmartPrediction() {
       setRestockRecommendations(prev =>
         prev.filter(item => item.productId !== productId)
       );
+      
+      // Also update the cache
+      updateRecommendations(productId);
       
       // Set state for in-page alert
       setRestockAlert({

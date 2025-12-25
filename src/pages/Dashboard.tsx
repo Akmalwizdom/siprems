@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { TrendingUp, ShoppingBag, Package, AlertCircle, Loader2, Trophy } from 'lucide-react';
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TimeRange, DashboardMetrics, CategorySales } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/Button';
-import { API_BASE_URL } from '../config';
 import { useRole } from '../context/AuthContext';
-import { AdminOnly } from '../components/auth/RoleGuard';
+import { useDashboardData } from '../hooks';
 
 interface TopProduct {
   id: string;
@@ -53,66 +52,44 @@ export function Dashboard() {
   const { isAdmin } = useRole();
   // Users can only see 'today' metrics, admins can see all time ranges
   const [selectedRange, setSelectedRange] = useState<TimeRange>(isAdmin ? 'month' : 'today');
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [salesData, setSalesData] = useState<any[]>([]);
-  const [allProducts, setAllProducts] = useState<any[]>([]); // All products for stock health
-  const [criticalStockItems, setCriticalStockItems] = useState<any[]>([]);
-  const [categorySales, setCategorySales] = useState<CategorySales[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [selectedRange]);
+  // React Query hooks - data is cached and instantly available on revisits
+  const { metrics, salesChart, categorySales, todaySummary, products, isLoading } = useDashboardData(selectedRange);
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    try {
-      const [metricsRes, salesRes, productsRes, categoryRes, todayRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/dashboard/metrics?range=${selectedRange}`),
-        fetch(`${API_BASE_URL}/dashboard/sales-chart`),
-        fetch(`${API_BASE_URL}/products`),
-        fetch(`${API_BASE_URL}/dashboard/category-sales`),
-        fetch(`${API_BASE_URL}/dashboard/today`)
-      ]);
-
-      const metricsData = await metricsRes.json();
-      const salesDataRaw = await salesRes.json();
-      const productsData = await productsRes.json();
-      const categoryData = await categoryRes.json();
-      const todayData = await todayRes.json();
-
-      setMetrics(metricsData);
-      setSalesData(salesDataRaw);
-      setCategorySales(categoryData);
-      
-      // Set top products from today's summary (top 5)
-      if (todayData.products && Array.isArray(todayData.products)) {
-        setTopProducts(todayData.products.slice(0, 5));
-      }
-      
-      // Products now returns paginated format { data: [...], total, page, ... }
-      const products = productsData.data || productsData;
-      const productsList = Array.isArray(products) ? products : [];
-      setAllProducts(productsList);
-      // Critical items: stock below reorder_point (default 100) or below 50 units
-      setCriticalStockItems(productsList.filter((p: any) => 
-        p.stock < (p.reorder_point || 100) || p.stock < 50
-      ));
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
+  // Derive data from React Query results
+  const metricsData = metrics.data as DashboardMetrics | undefined;
+  const salesData = salesChart.data || [];
+  const categorySalesData: CategorySales[] = categorySales.data || [];
+  const allProducts = products.data || [];
+  
+  // Top products from today's summary
+  const topProducts: TopProduct[] = useMemo(() => {
+    const todayData = todaySummary.data;
+    if (todayData?.products && Array.isArray(todayData.products)) {
+      return todayData.products.slice(0, 5);
     }
-  };
+    return [];
+  }, [todaySummary.data]);
 
-  if (loading || !metrics) {
+  // Critical stock items
+  const criticalStockItems = useMemo(() => {
+    const productsList = Array.isArray(allProducts) ? allProducts : [];
+    return productsList.filter((p: any) => 
+      p.stock < (p.reorder_point || 100) || p.stock < 50
+    );
+  }, [allProducts]);
+
+  if (isLoading || !metricsData) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
       </div>
     );
   }
+
+  // Use metricsData instead of metrics for the rest of the component
+  const displayMetrics = metricsData;
+
 
   return (
     <div className="space-y-6">
@@ -145,12 +122,12 @@ export function Dashboard() {
             <div className="p-3 rounded-lg" style={{ backgroundColor: '#3457D5' }}>
               <TrendingUp className="w-6 h-6 text-white" />
             </div>
-            <span className={`${metrics.revenueChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
-              {metrics.revenueChange >= 0 ? '+' : ''}{metrics.revenueChange}%
+            <span className={`${displayMetrics.revenueChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
+              {displayMetrics.revenueChange >= 0 ? '+' : ''}{displayMetrics.revenueChange}%
             </span>
           </div>
           <h3 className="text-slate-500 mb-1">Total Pendapatan</h3>
-          <p className="text-slate-900">{formatIDR(metrics.totalRevenue)}</p>
+          <p className="text-slate-900">{formatIDR(displayMetrics.totalRevenue)}</p>
           <p className="text-xs text-slate-400 mt-2">vs periode sebelumnya</p>
         </div>
 
@@ -159,12 +136,12 @@ export function Dashboard() {
             <div className="p-3 rounded-lg" style={{ backgroundColor: '#8A2BE2' }}>
               <ShoppingBag className="w-6 h-6 text-white" />
             </div>
-            <span className={`${metrics.transactionsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
-              {metrics.transactionsChange >= 0 ? '+' : ''}{metrics.transactionsChange}%
+            <span className={`${displayMetrics.transactionsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
+              {displayMetrics.transactionsChange >= 0 ? '+' : ''}{displayMetrics.transactionsChange}%
             </span>
           </div>
           <h3 className="text-slate-500 mb-1">Total Transaksi</h3>
-          <p className="text-slate-900">{metrics.totalTransactions.toLocaleString()}</p>
+          <p className="text-slate-900">{displayMetrics.totalTransactions.toLocaleString()}</p>
           <p className="text-xs text-slate-400 mt-2">vs periode sebelumnya</p>
         </div>
 
@@ -173,12 +150,12 @@ export function Dashboard() {
             <div className="p-3 rounded-lg" style={{ backgroundColor: '#6F00FF' }}>
               <Package className="w-6 h-6 text-white" />
             </div>
-            <span className={`${metrics.itemsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
-              {metrics.itemsChange >= 0 ? '+' : ''}{metrics.itemsChange}%
+            <span className={`${displayMetrics.itemsChange >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'} px-3 py-1 rounded-full`}>
+              {displayMetrics.itemsChange >= 0 ? '+' : ''}{displayMetrics.itemsChange}%
             </span>
           </div>
           <h3 className="text-slate-500 mb-1">Barang Terjual</h3>
-          <p className="text-slate-900">{metrics.totalItemsSold.toLocaleString()}</p>
+          <p className="text-slate-900">{displayMetrics.totalItemsSold.toLocaleString()}</p>
           <p className="text-xs text-slate-400 mt-2">vs periode sebelumnya</p>
         </div>
       </div>
@@ -238,7 +215,7 @@ export function Dashboard() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={categorySales}
+                  data={categorySalesData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -247,7 +224,7 @@ export function Dashboard() {
                   dataKey="value"
                   nameKey="category"
                 >
-                  {categorySales.map((entry, index) => (
+                  {categorySalesData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -267,10 +244,10 @@ export function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-3 mt-4">
-              {categorySales.length === 0 && (
+              {categorySalesData.length === 0 && (
                 <p className="text-sm text-slate-500">Belum ada data kategori</p>
               )}
-              {categorySales.map((cat) => (
+              {categorySalesData.map((cat) => (
                 <div key={cat.category} className="flex items-center gap-1.5">
                   <div
                     className="w-3 h-3 min-w-[12px] min-h-[12px] rounded-full flex-shrink-0"
@@ -294,7 +271,7 @@ export function Dashboard() {
             <ResponsiveContainer width="99%" height={250}>
               <PieChart>
                 <Pie
-                  data={categorySales}
+                  data={categorySalesData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -303,7 +280,7 @@ export function Dashboard() {
                   dataKey="value"
                   nameKey="category"
                 >
-                  {categorySales.map((entry, index) => (
+                  {categorySalesData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -323,10 +300,10 @@ export function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-4 mt-4">
-              {categorySales.length === 0 && (
+            {categorySalesData.length === 0 && (
                 <p className="text-sm text-slate-500">Belum ada data kategori</p>
               )}
-              {categorySales.map((cat) => (
+            {categorySalesData.map((cat) => (
                 <div key={cat.category} className="flex items-center gap-2">
                   <div
                     className="w-3 h-3 min-w-[12px] min-h-[12px] rounded-full flex-shrink-0"

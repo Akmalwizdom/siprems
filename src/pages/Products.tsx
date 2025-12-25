@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRight, Coffee } from 'lucide-react';
 import { Product } from '../types';
 import { formatIDR } from '../utils/currency';
@@ -8,16 +8,27 @@ import { AdminOnly } from '../components/auth/RoleGuard';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
+import { useProducts, useCategories } from '../hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { productKeys } from '../hooks/useProducts';
 
 export function Products() {
   const { getAuthToken } = useAuth();
   const { showToast } = useToast();
   
-  // All products from API (cached for client-side filtering)
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  // React Query hooks for cached data fetching
+  const queryClient = useQueryClient();
+  const { data: allProducts = [], isLoading } = useProducts();
+  const { data: categoriesData = [] } = useCategories();
+
+  // Function to invalidate products cache after mutations
+  const invalidateProducts = () => {
+    queryClient.invalidateQueries({ queryKey: productKeys.all });
+  };
+
+  const categories = ['All', ...categoriesData];
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [categories, setCategories] = useState<string[]>(['All']);
   const [selectedCategory, setSelectedCategory] = useState('All');
   
   // Pagination State
@@ -41,16 +52,7 @@ export function Products() {
   // Delete confirmation dialog state
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
-  // Load all products once on mount
-  useEffect(() => {
-    fetchCategories();
-    fetchAllProducts();
-  }, []);
 
-  // Reset to page 1 when search or category changes
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, selectedCategory]);
 
   // ============================================
   // CLIENT-SIDE FILTERING - INSTANT SEARCH
@@ -85,42 +87,6 @@ export function Products() {
     const startIndex = (page - 1) * limit;
     return filteredProducts.slice(startIndex, startIndex + limit);
   }, [filteredProducts, page, limit]);
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/products/categories`);
-      const data = await response.json();
-      setCategories(['All', ...data.categories]);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
-  // Fetch ALL products once for client-side filtering
-  const fetchAllProducts = async () => {
-    try {
-      // Fetch with a high limit to get all products
-      const response = await fetch(`${API_BASE_URL}/products?limit=1000`);
-      const data = await response.json();
-      
-      const products = data.data.map((p: any) => ({
-        id: p.id.toString(),
-        name: p.name,
-        category: p.category,
-        costPrice: parseFloat(p.cost_price),
-        sellingPrice: parseFloat(p.selling_price),
-        stock: p.stock,
-        imageUrl: p.image_url || '',
-        description: p.description || ''
-      }));
-      
-      setAllProducts(products);
-      setIsInitialLoad(false);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      setIsInitialLoad(false);
-    }
-  };
 
 
   const getStockStatus = (stock: number): 'critical' | 'low' | 'good' => {
@@ -254,7 +220,7 @@ export function Products() {
       }
 
       showToast(editingProduct ? 'Produk berhasil diperbarui' : 'Produk berhasil ditambahkan', 'success');
-      await fetchAllProducts(); // Refresh list
+      invalidateProducts(); // Invalidate cache to refresh list
       closeModal();
     } catch (error: any) {
       console.error('Submit error:', error);
@@ -268,15 +234,28 @@ export function Products() {
     setProductToDelete(product);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (productToDelete) {
-      setAllProducts(allProducts.filter((p) => p.id !== productToDelete.id));
+      try {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        await fetch(`${API_BASE_URL}/products/${productToDelete.id}`, {
+          method: 'DELETE',
+          headers,
+        });
+        invalidateProducts();
+        showToast('Produk berhasil dihapus', 'success');
+      } catch (error) {
+        showToast('Gagal menghapus produk', 'error');
+      }
       setProductToDelete(null);
     }
   };
 
   // Only show full-page loading on initial load
-  if (isInitialLoad && allProducts.length === 0) {
+  if (isLoading && allProducts.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
