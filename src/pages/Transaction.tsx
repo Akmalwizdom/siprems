@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Printer, Coffee } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Coffee } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/Button';
@@ -9,6 +9,7 @@ import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../context/AuthContext';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { MobileCartSheet, FloatingCartButton } from '../components/transaction';
 
 interface TransactionItem {
   product_name: string;
@@ -461,11 +462,17 @@ function POSView({
   orderType,
   setOrderType
 }: any) {
+  // Mobile cart sheet state
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  
   const filteredProducts = products.filter((product: Product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  // Calculate total items for mobile badge
+  const totalItems = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
 
   if (loading) {
     return (
@@ -476,7 +483,34 @@ function POSView({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ height: 'calc(100vh - 10rem)', minHeight: '500px' }}>
+    <>
+      {/* Mobile Cart Sheet */}
+      <MobileCartSheet
+        isOpen={isMobileCartOpen}
+        onClose={() => setIsMobileCartOpen(false)}
+        cart={cart}
+        updateQuantity={updateQuantity}
+        removeFromCart={removeFromCart}
+        subtotal={subtotal}
+        tax={tax}
+        total={total}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        orderType={orderType}
+        setOrderType={setOrderType}
+        handleCheckout={handleCheckout}
+      />
+
+      {/* Floating Cart Button - Mobile Only */}
+      <div className="lg:hidden">
+        <FloatingCartButton
+          itemCount={totalItems}
+          total={total}
+          onClick={() => setIsMobileCartOpen(true)}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ height: 'calc(100vh - 10rem)', minHeight: '500px' }}>
       {/* Product Catalog - Scrollable */}
       <div className="lg:col-span-2 flex flex-col min-h-0">
         <div className="shrink-0">
@@ -553,8 +587,8 @@ function POSView({
         </div>
       </div>
 
-      {/* Shopping Cart - Fixed Height */}
-      <div className="lg:col-span-1 flex flex-col min-h-0">
+      {/* Shopping Cart - Hidden on mobile, visible on desktop */}
+      <div className="hidden lg:flex lg:col-span-1 flex-col min-h-0">
         <div className="bg-white rounded-xl border border-slate-200 flex flex-col flex-1 min-h-0">
           <div className="p-6 border-b border-slate-200 shrink-0">
             <div className="flex items-center gap-3 mb-2">
@@ -680,6 +714,7 @@ function POSView({
         </div>
       </div>
     </div>
+    </>
   );
 }
 

@@ -2002,4 +2002,24 @@ html {
   .lg\:col-span-2 {
     grid-column: span 2 / span 2;
   }
+
+  /* Hide on large screens */
+  .lg\:hidden {
+    display: none !important;
+  }
+
+  /* Show flex on large screens */
+  .lg\:flex {
+    display: flex !important;
+  }
+}
+
+/* ===== MOBILE COMPONENTS UTILITIES ===== */
+.rounded-t-3xl {
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+}
+
+.hidden {
+  display: none;
 }
