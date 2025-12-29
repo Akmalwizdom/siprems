@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiService, type PredictionResponse, type ModelAccuracyResponse } from '../services/api';
 import { geminiService, type ChatMessage, type CommandAction } from '../services/gemini';
 import { PredictionData, RestockRecommendation } from '../types';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '../components/ui/Alert';
 import { RestockModal } from '../components/prediction/RestockModal';
 import { ChatBot } from '../components/prediction/ChatBot';

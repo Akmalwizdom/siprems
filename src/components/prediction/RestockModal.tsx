@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Package, AlertTriangle, Info, Minus, Plus, TrendingUp } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { Button } from '../ui/button';
 
 interface RestockModalProps {
   isOpen: boolean;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ShoppingCart, Minus, Plus, Trash2, X, Coffee } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { Button } from '../ui/button';
 import { CartItem } from '../../types';
 import { formatIDR } from '../../utils/currency';
 

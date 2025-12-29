@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useStore, type CalendarEvent } from '../context/StoreContext';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { API_BASE_URL } from '../config';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { useToast } from '../components/ui/toast';

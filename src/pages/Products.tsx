@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Upload, X, Loader2, ChevronLeft, ChevronRight, Coffee, Tag } from 'lucide-react';
 import { Product } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { API_BASE_URL } from '../config';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';

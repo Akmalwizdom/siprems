@@ -4,7 +4,7 @@ import { TrendingUp, ShoppingBag, Package, Loader2, Trophy } from 'lucide-react'
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TimeRange, DashboardMetrics, CategorySales } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { useRole } from '../context/AuthContext';
 import { useDashboardData } from '../hooks';
 

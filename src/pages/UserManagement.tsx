@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Users, Search, Loader2, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { useAuth, UserRole } from '../context/AuthContext';
 import { useToast } from '../components/ui/toast';
 import { API_BASE_URL } from '../config';

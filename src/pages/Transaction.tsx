@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Loader2, ChevronLeft, ChevronRight, History, FileSpreadsheet, FileText, Calendar, Coffee } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { formatIDR } from '../utils/currency';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { API_BASE_URL } from '../config';
 import { exportToExcel, exportToPDF, printReceipt, type TransactionExport, type TransactionDetail, type StoreProfile } from '../utils/export';
 import { useToast } from '../components/ui/toast';
