@@ -2,3 +2,7 @@
 builder = "dockerfile"
 dockerfilePath = "backend-ts/Dockerfile"
 watchPatterns = ["backend-ts/**"]
+
+[deploy]
+startCommand = "npm start"
+
