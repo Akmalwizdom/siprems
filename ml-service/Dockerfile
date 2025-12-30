@@ -8,12 +8,12 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
-COPY requirements.txt .
+# Copy requirements and install (from ml-service folder since context is repo root)
+COPY ml-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application code from ml-service folder
+COPY ml-service/ .
 
 # Create models directory
 RUN mkdir -p /app/models
@@ -26,3 +26,4 @@ EXPOSE 8001
 
 # Run startup script (auto-train check + FastAPI server)
 CMD ["/bin/sh", "/app/start.sh"]
+

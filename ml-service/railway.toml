@@ -1,0 +1,7 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "ml-service/Dockerfile"
+watchPatterns = ["ml-service/**"]
+
+[deploy]
+startCommand = "/bin/sh /app/start.sh"
