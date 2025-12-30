@@ -1,6 +1,4 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "serve -s dist -l 3000"
+target = "production"
