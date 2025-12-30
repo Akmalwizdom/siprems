@@ -1,4 +1,4 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.frontend"
 target = "production"
