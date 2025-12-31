@@ -65,10 +65,10 @@ Pergi ke tab **Variables**, tambahkan:
 ```env
 NODE_ENV=production
 PORT=3000
-DATABASE_URL=postgresql://postgres.hnddcambdbftrehbhetb:YA10eYEACRPZuOvh@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres
-SUPABASE_URL=https://hnddcambdbftrehbhetb.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhuZGRjYW1iZGJmdHJlaGJoZXRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MzQ0MTMsImV4cCI6MjA3OTUxMDQxM30.fVU8M1CFosUERkFSQHmXjnhFiuYwQ0VgkKxmqRuXXkM
-GEMINI_API_KEY=AIzaSyDj1FdY3Yk6RqcNHt8JLd3xseqYx_0fZh0
+DATABASE_URL=your_supabase_database_url_here
+SUPABASE_URL=your_supabase_project_url_here
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ML_SERVICE_URL=http://${{ml-service.RAILWAY_PRIVATE_DOMAIN}}:8001
 ```
 
@@ -114,12 +114,12 @@ Jika perlu akses publik, generate domain di Networking.
 ### 4.2 Add Environment Variables
 ```env
 VITE_API_URL=https://[backend-domain].up.railway.app
-VITE_FIREBASE_API_KEY=AIzaSyDPZzEoxBztDbrNBedFsS0_AvyITUUajSU
-VITE_FIREBASE_AUTH_DOMAIN=siprems-6fa80.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=siprems-6fa80
-VITE_FIREBASE_STORAGE_BUCKET=siprems-6fa80.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=428482190168
-VITE_FIREBASE_APP_ID=1:428482190168:web:ac3820b03ea2cbb8a0632d
+VITE_FIREBASE_API_KEY=your_firebase_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
 ```
 
 ### 4.3 Generate Domain
