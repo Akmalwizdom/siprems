@@ -64,17 +64,18 @@ export async function authenticate(
                     .from('users')
                     .select('*', { count: 'exact', head: true });
 
-                const isFirstUser = !countError && (userCount === 0 || userCount === null);
-                const assignedRole: UserRole = isFirstUser ? 'admin' : 'user';
+                // For demo purposes: all new users get admin role
+                // In production, change 'admin' back to: isFirstUser ? 'admin' : 'user'
+                const assignedRole: UserRole = 'admin';
 
-                console.log(`[Auth] Creating new user: ${email}, isFirstUser: ${isFirstUser}, role: ${assignedRole}`);
+                console.log(`[Auth] Creating new user: ${email}, role: ${assignedRole}`);
 
                 const { data: newUser, error: createError } = await supabase
                     .from('users')
                     .insert({
                         firebase_uid: userId,
                         email: email,
-                        role: assignedRole, // First user = admin, otherwise = user
+                        role: assignedRole, // Demo: all users get admin access
                         display_name: displayName,
                         avatar_url: avatarUrl,
                     })
