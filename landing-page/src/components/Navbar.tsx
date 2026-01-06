@@ -20,7 +20,7 @@ const Navbar = () => {
         <div className="container mx-auto flex items-center justify-between">
           {/* Logo */}
           <a href="#beranda" className="flex items-center gap-2">
-            <img src="/logo-siprems.png" alt="Siprems Logo" className="h-10 w-10 rounded-xl object-contain" />
+            <img src="/logo-siprems.png" alt="Siprems Logo" className="h-12 w-12 rounded-xl object-contain" />
             <span className="text-xl font-bold text-foreground">Siprems</span>
           </a>
 
