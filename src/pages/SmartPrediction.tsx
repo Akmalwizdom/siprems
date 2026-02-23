@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, AlertTriangle, Clock, Calendar as CalendarIcon } from 'lucide-react';
+import { Zap, AlertTriangle, Clock, Calendar as CalendarIcon, TrendingUp } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { apiService, type PredictionResponse, type ModelAccuracyResponse } from '../services/api';
 import { geminiService, type ChatMessage, type CommandAction } from '../services/gemini';
@@ -51,7 +51,6 @@ export function SmartPrediction() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<CommandAction | null>(null);
-  const [isConfirmLoading, setIsConfirmLoading] = useState(false);
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [selectedRestockProduct, setSelectedRestockProduct] =
     useState<RestockRecommendation | null>(null);
@@ -161,7 +160,7 @@ export function SmartPrediction() {
           size="lg"
           className="bronze-gradient shadow-bronze-200 shadow-lg"
         >
-          <Sparkles className="mr-2 h-4 w-4" />
+          <TrendingUp className="mr-2 h-4 w-4" />
           Coba Lagi
         </Button>
       </div>
@@ -171,10 +170,10 @@ export function SmartPrediction() {
     return (
       <div className="animate-slide-up mx-auto max-w-2xl py-20 text-center">
         <div className="bronze-gradient shadow-bronze-100/50 mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-[32px] border-4 border-white/50 shadow-2xl">
-          <Sparkles className="h-10 w-10 text-white" />
+          <Zap className="h-10 w-10 text-white" />
         </div>
         <h1 className="mb-4 text-4xl font-black tracking-tight text-slate-900 italic">
-          Prediksi Stok <span className="text-bronze-600 not-italic">Cerdas.</span>
+          Perencanaan Stok <span className="text-bronze-600 not-italic">Strategis.</span>
         </h1>
         <p className="mb-12 px-4 leading-relaxed font-medium text-slate-500">
           Artificial Intelligence kami menganalisis riwayat penjualan, tren musiman, dan hari libur
@@ -196,9 +195,9 @@ export function SmartPrediction() {
               onClick={() => handleStartPrediction(30)}
               className="group bronze-gradient shadow-bronze-200 flex h-14 items-center gap-3 rounded-2xl px-10 shadow-xl transition-all hover:translate-y-[-2px] hover:shadow-2xl active:scale-95"
             >
-              <Sparkles className="h-5 w-5 animate-pulse text-white" />
+              <Zap className="h-5 w-5 animate-pulse text-white" />
               <span className="text-xs font-black tracking-widest text-white uppercase">
-                Mulai Prediksi 30 Hari
+                Mulai Analisis 30 Hari
               </span>
             </button>
 

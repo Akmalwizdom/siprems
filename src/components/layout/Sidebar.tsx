@@ -3,14 +3,13 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
-  Brain,
+  TrendingUp,
   Settings,
   Calendar,
   X,
   ChevronLeft,
   ChevronRight,
   Users,
-  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -37,7 +36,7 @@ const navItems: NavItem[] = [
   { path: '/transaction', icon: ShoppingCart, label: 'Transaksi' },
   { path: '/products', icon: Package, label: 'Produk' },
   { path: '/calendar', icon: Calendar, label: 'Kalender' },
-  { path: '/prediction', icon: Brain, label: 'Prediksi Cerdas', allowedRoles: ['admin'] },
+  { path: '/prediction', icon: TrendingUp, label: 'Analisis Prediktif', allowedRoles: ['admin'] },
   { path: '/users', icon: Users, label: 'Kelola Pengguna', allowedRoles: ['admin'] },
   { path: '/settings', icon: Settings, label: 'Pengaturan' },
 ];
@@ -92,7 +91,7 @@ export function Sidebar({
               />
             ) : (
               <div className="bronze-gradient shadow-bronze-200/50 flex h-10 w-10 items-center justify-center rounded-xl shadow-lg">
-                <Sparkles className="h-5 w-5 text-white" />
+                <TrendingUp className="h-5 w-5 text-white" />
               </div>
             )}
             {!isCollapsed && (

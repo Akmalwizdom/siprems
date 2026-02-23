@@ -106,7 +106,7 @@ export function RecommendationCards({ recommendations }: RecommendationCardsProp
       {recommendations.length === 0 && (
         <div className="glass-card col-span-full rounded-3xl py-20 text-center">
           <p className="text-sm font-bold tracking-widest text-slate-400 uppercase">
-            Semua stok terpantau aman oleh AI.
+            Status stok dalam parameter aman.
           </p>
         </div>
       )}

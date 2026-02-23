@@ -1,4 +1,4 @@
-import { RefreshCw, Calendar, Download, Sparkles, ChevronDown } from 'lucide-react';
+import { RefreshCw, Calendar, Download, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { TimeRange } from '../../types';
 
@@ -37,7 +37,6 @@ export function DashboardHeader({
     <div className="mb-8 flex flex-col justify-between gap-6 xl:flex-row xl:items-center">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <Sparkles className="text-bronze-500 h-5 w-5" />
           <h1 className="text-3xl font-black tracking-tight text-slate-900 italic">
             Ringkasan <span className="text-bronze-600 not-italic">Bisnis.</span>
           </h1>
