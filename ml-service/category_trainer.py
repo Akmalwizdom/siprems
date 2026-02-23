@@ -247,9 +247,43 @@ class CategoryTrainer:
         # Save model
         self._save_model(category, model, metadata)
         
+        # Log metrics to DB
+        self.save_metrics_to_db(category, metadata)
+        
         logger.info(f"Category '{category}' trained: accuracy={accuracy:.1f}%, MAPE={mape:.1f}%")
         
         return {"status": "success", **metadata}
+    
+    def save_metrics_to_db(self, category_name: str, metadata: Dict):
+        """Save training metrics to the database for historical tracking"""
+        query = text("""
+            INSERT INTO ml_model_metrics (
+                model_type, target_id, version, accuracy, mape, 
+                y_mean, y_std, data_points, training_time_seconds, 
+                quality_report, parameters
+            ) VALUES (
+                'prophet_category', :target_id, :version, :accuracy, :mape,
+                :y_mean, :y_std, :data_points, 0.0,
+                :quality_report, :parameters
+            )
+        """)
+        
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(query, {
+                    "target_id": category_name,
+                    "version": metadata.get("trained_at", "v1"),
+                    "accuracy": metadata.get("accuracy"),
+                    "mape": metadata.get("mape"),
+                    "y_mean": metadata.get("y_mean"),
+                    "y_std": metadata.get("y_std"),
+                    "data_points": metadata.get("data_points"),
+                    "quality_report": json.dumps({}),
+                    "parameters": json.dumps({})
+                })
+            logger.info(f"Category metrics saved to DB for {category_name}")
+        except Exception as e:
+            logger.error(f"Failed to save category metrics to DB: {e}")
     
     def train_all_categories(
         self,

@@ -296,12 +296,50 @@ class ModelTrainer:
             quality_report["outlier_ratio"] = round(outliers / len(df), 3)
         
         # Data freshness
-        last_date = df['ds'].max().date()
-        data_age = (get_current_date_wib() - last_date).days
-        quality_report["data_age_days"] = data_age
+        if data_age > 7:
+            logger.warning(f"Data is potentially stale ({data_age} days old)")
         
+        quality_report["status"] = "passed"
+        if non_zero_ratio < 0.8:
+            quality_report["status"] = "warning"
+            logger.warning(f"Data quality warning: non-zero ratio {non_zero_ratio:.1%}")
+            
         logger.info(f"Data quality: {quality_report}")
         return quality_report
+    
+    def save_metrics_to_db(self, model_type: str, target_id: str, metadata: Dict):
+        """Save training metrics to the database for historical tracking"""
+        query = text("""
+            INSERT INTO ml_model_metrics (
+                model_type, target_id, version, accuracy, mape, 
+                y_mean, y_std, data_points, training_time_seconds, 
+                quality_report, parameters
+            ) VALUES (
+                :model_type, :target_id, :version, :accuracy, :mape,
+                :y_mean, :y_std, :data_points, :training_time,
+                :quality_report, :parameters
+            )
+        """)
+        
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(query, {
+                    "model_type": model_type,
+                    "target_id": target_id,
+                    "version": metadata.get("model_version", "v1"),
+                    "accuracy": metadata.get("accuracy"),
+                    "mape": metadata.get("validation_mape"),
+                    "y_mean": metadata.get("y_mean"),
+                    "y_std": metadata.get("y_std"),
+                    "data_points": metadata.get("data_points"),
+                    "training_time": metadata.get("training_time_seconds"),
+                    "quality_report": json.dumps(metadata.get("quality_report", {})),
+                    "parameters": json.dumps(metadata.get("prophet_params", {}))
+                })
+            logger.info(f"Metrics saved to DB for {model_type}:{target_id}")
+        except Exception as e:
+            logger.error(f"Failed to save metrics to DB: {e}")
+            # Don't raise, we still want the model to be usable even if logging fails
     
     def calculate_dynamic_changepoint_scale(self, df: pd.DataFrame, base_scale: float) -> Tuple[float, float]:
         """
@@ -454,8 +492,11 @@ class ModelTrainer:
         
         logger.info(f"Training completed - Accuracy: {accuracy}%, Train MAPE: {train_mape}%, Val MAPE: {val_mape}%")
         
-        # Save model
+        # Save model to disk
         self.save_model(store_id, model, metadata)
+        
+        # Log metrics to DB
+        self.save_metrics_to_db("prophet_store", store_id, metadata)
         
         return model, metadata
     
