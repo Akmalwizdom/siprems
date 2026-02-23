@@ -1,4 +1,4 @@
-import React from 'react';
+// removed: import React from 'react';
 import './loader.css';
 
 /**

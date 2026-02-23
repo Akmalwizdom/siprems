@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config';
+import logger from './config/logger';
+import { errorHandler } from './middleware/error-handler';
 
 const app = express();
 
@@ -30,6 +32,12 @@ app.use(
         allowedHeaders: ['Content-Type', 'Authorization'],
     })
 );
+
+// Request logging middleware (Added)
+app.use((req, res, next) => {
+    logger.info({ method: req.method, path: req.path, ip: req.ip }, 'Incoming Request');
+    next();
+});
 
 // Rate Limiting: Prevent brute force and DoS attacks
 const apiLimiter = rateLimit({
@@ -92,35 +100,15 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/categories', categoriesRouter);
 
 // ─── Error Handling ─────────────────────────────────────────
-app.use(
-    (
-        err: Error & { status?: number },
-        _req: express.Request,
-        res: express.Response,
-        _next: express.NextFunction
-    ) => {
-        // CORS errors
-        if (err.message.startsWith('CORS:')) {
-            return res.status(403).json({ error: err.message });
-        }
-
-        console.error('[Error]', err.message);
-
-        // In production, don't expose internal error details
-        const isProduction = process.env.NODE_ENV === 'production';
-        res.status(err.status || 500).json({
-            error: isProduction ? 'Internal Server Error' : err.message,
-        });
-    }
-);
+app.use(errorHandler);
 
 // ─── Start Server ───────────────────────────────────────────
-const PORT = config.port;
+const PORT = config.port || 8000;
 app.listen(PORT, () => {
-    console.log(`✅ Backend TS running on http://localhost:${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    console.log(`🔒 CORS origins: ${allowedOrigins.join(', ')}`);
-    console.log(`🛡️  Rate limiting: 200 req/15min (API), 20 req/15min (Auth)`);
+    logger.info(`✅ Backend TS running on http://localhost:${PORT}`);
+    logger.info(`📊 Health check: http://localhost:${PORT}/health`);
+    logger.info(`🔒 CORS origins: ${allowedOrigins.join(', ')}`);
+    logger.info(`🛡️ Rate limiting: 200 req/15min (API), 20 req/15min (Auth)`);
 });
 
 export default app;

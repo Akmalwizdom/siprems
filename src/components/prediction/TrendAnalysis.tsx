@@ -63,7 +63,7 @@ export function TrendAnalysis({
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
+              className="h-full rounded-full bg-linear-to-r from-indigo-500 to-purple-500"
               style={{ width: `${accuracy || 0}%` }}
             ></div>
           </div>

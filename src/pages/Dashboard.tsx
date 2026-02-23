@@ -13,8 +13,10 @@ import { TopProductsChart } from '../components/dashboard/TopProductsChart';
 import { StockHealthChart } from '../components/dashboard/StockHealthChart';
 
 export function Dashboard() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { role, isAdmin } = useAuth();
+  // isAdmin is already provided by useAuth(), so we don't need a separate declaration
+  // but if we want to keep the variable name:
+  // const isAdmin = role === 'admin'; 
   const [selectedRange, setSelectedRange] = useState<TimeRange>('today');
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);

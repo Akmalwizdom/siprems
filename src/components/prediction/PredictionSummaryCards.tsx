@@ -51,7 +51,7 @@ export function PredictionSummaryCards({ metrics }: PredictionSummaryCardsProps)
       {cards.map((card) => (
         <div key={card.label} className="group relative">
           <div
-            className={`absolute -inset-0.5 bg-gradient-to-br ${card.color} rounded-3xl opacity-0 blur transition duration-500 group-hover:opacity-20`}
+            className={`absolute -inset-0.5 bg-linear-to-br ${card.color} rounded-3xl opacity-0 blur transition duration-500 group-hover:opacity-20`}
           ></div>
           <div className="glass-card relative rounded-3xl p-6 transition-all duration-300 group-hover:translate-y-[-4px]">
             <div className="mb-4 flex items-start justify-between">

@@ -16,6 +16,17 @@ export interface PredictionRequest {
   days?: number;
 }
 
+export interface GenericResponse {
+  status: string;
+  message?: string;
+  error?: string;
+  [key: string]: any;
+}
+
+export interface ProductResponse extends GenericResponse {
+  product: any; // Ideally this matches the Product interface if available
+}
+
 export interface PredictionResponse {
   status: string;
   chartData: Array<{
@@ -72,7 +83,7 @@ class ApiService {
     this.baseUrl = baseUrl;
   }
 
-  async trainModel(storeId: string, storeConfig?: { CompetitionDistance: number }): Promise<any> {
+  async trainModel(storeId: string, storeConfig?: { CompetitionDistance: number }): Promise<GenericResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/train/${storeId}`, {
         method: 'POST',
@@ -142,7 +153,7 @@ class ApiService {
     }
   }
 
-  async restockProduct(productId: string, quantity: number, token?: string): Promise<any> {
+  async restockProduct(productId: string, quantity: number, token?: string): Promise<ProductResponse> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
@@ -196,7 +207,7 @@ class ApiService {
     }
   }
 
-  async addProduct(productData: { name: string; category?: string; initialStock: number }): Promise<any> {
+  async addProduct(productData: { name: string; category?: string; initialStock: number }): Promise<ProductResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/products`, {
         method: 'POST',
@@ -217,7 +228,7 @@ class ApiService {
     }
   }
 
-  async deleteProduct(productId: string): Promise<any> {
+  async deleteProduct(productId: string): Promise<GenericResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/products/${productId}`, {
         method: 'DELETE',
@@ -237,7 +248,7 @@ class ApiService {
     }
   }
 
-  async updateStock(productId: string, newStock: number): Promise<any> {
+  async updateStock(productId: string, newStock: number): Promise<ProductResponse> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
