@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { firebaseAuth } from '../config/firebase';
 import { supabase } from '../services/database';
 
 export type UserRole = 'user' | 'admin';
@@ -12,8 +13,11 @@ export interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Middleware to authenticate user by Firebase ID token
- * and fetch user role from Supabase
+ * Middleware to authenticate user by Firebase ID token.
+ * 
+ * SECURITY: Uses Firebase Admin SDK to cryptographically verify
+ * the JWT signature, expiration, audience, and issuer.
+ * This replaces the previous insecure base64-decode approach.
  */
 export async function authenticate(
     req: AuthenticatedRequest,
@@ -29,83 +33,79 @@ export async function authenticate(
 
         const token = authHeader.split('Bearer ')[1];
 
-        // Decode Firebase ID token (we'll verify on frontend, backend trusts the UID)
-        // In production, you should verify the token with Firebase Admin SDK
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-            return res.status(401).json({ error: 'Unauthorized: Invalid token format' });
+        // SECURITY FIX: Verify token cryptographically with Firebase Admin SDK
+        // This validates the signature, expiration, audience, and issuer
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAuth.verifyIdToken(token);
+        } catch (verifyError) {
+            console.warn('[Auth] Token verification failed:', (verifyError as Error).message);
+            return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
         }
 
-        try {
-            const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-            const userId = payload.user_id || payload.sub;
-            const email = payload.email;
+        const userId = decodedToken.uid;
+        const email = decodedToken.email || '';
 
-            if (!userId) {
-                return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-            }
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized: Token missing user ID' });
+        }
 
-            // Fetch user role from Supabase
-            const { data: userData, error } = await supabase
+        // Look up user in Supabase by Firebase UID
+        const { data: userData, error } = await supabase
+            .from('users')
+            .select('id, email, role')
+            .eq('firebase_uid', userId)
+            .single();
+
+        if (error || !userData) {
+            // New user — auto-provision with correct role assignment
+            const displayName = decodedToken.name || null;
+            const avatarUrl = decodedToken.picture || null;
+
+            // SECURITY FIX: Only the FIRST user gets admin role (business owner).
+            // All subsequent users get 'user' role by default.
+            const { count: userCount } = await supabase
                 .from('users')
-                .select('id, email, role')
-                .eq('firebase_uid', userId)
+                .select('*', { count: 'exact', head: true });
+
+            const isFirstUser = userCount === 0;
+            const assignedRole: UserRole = isFirstUser ? 'admin' : 'user';
+
+            console.log(`[Auth] Creating new user: ${email}, role: ${assignedRole}, isFirst: ${isFirstUser}`);
+
+            const { data: newUser, error: createError } = await supabase
+                .from('users')
+                .insert({
+                    firebase_uid: userId,
+                    email: email,
+                    role: assignedRole,
+                    display_name: displayName,
+                    avatar_url: avatarUrl,
+                })
+                .select()
                 .single();
 
-            if (error || !userData) {
-                // User not found in our database, create with appropriate role
-                // Firebase JWT contains 'name' and 'picture' for Google accounts
-                const displayName = payload.name || null;
-                const avatarUrl = payload.picture || null;
-
-                // Check if this is the first user (database is empty)
-                // First user automatically becomes admin (for UMKM owner)
-                const { count: userCount, error: countError } = await supabase
-                    .from('users')
-                    .select('*', { count: 'exact', head: true });
-
-                // For demo purposes: all new users get admin role
-                // In production, change 'admin' back to: isFirstUser ? 'admin' : 'user'
-                const assignedRole: UserRole = 'admin';
-
-                console.log(`[Auth] Creating new user: ${email}, role: ${assignedRole}`);
-
-                const { data: newUser, error: createError } = await supabase
-                    .from('users')
-                    .insert({
-                        firebase_uid: userId,
-                        email: email,
-                        role: assignedRole, // Demo: all users get admin access
-                        display_name: displayName,
-                        avatar_url: avatarUrl,
-                    })
-                    .select()
-                    .single();
-
-                if (createError) {
-                    console.error('Error creating user:', createError);
-                    return res.status(500).json({ error: 'Failed to create user' });
-                }
-
-                req.user = {
-                    id: newUser.id,
-                    email: newUser.email,
-                    role: newUser.role as UserRole,
-                };
-            } else {
-                req.user = {
-                    id: userData.id,
-                    email: userData.email,
-                    role: userData.role as UserRole,
-                };
+            if (createError) {
+                console.error('[Auth] Failed to create user:', createError);
+                return res.status(500).json({ error: 'Failed to create user record' });
             }
 
-            next();
-        } catch (decodeError) {
-            return res.status(401).json({ error: 'Unauthorized: Failed to decode token' });
+            req.user = {
+                id: newUser.id,
+                email: newUser.email,
+                role: newUser.role as UserRole,
+            };
+        } else {
+            req.user = {
+                id: userData.id,
+                email: userData.email,
+                role: userData.role as UserRole,
+            };
         }
+
+        next();
     } catch (error) {
-        console.error('Authentication error:', error);
+        console.error('[Auth] Unexpected error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 }

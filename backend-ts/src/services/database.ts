@@ -1,18 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 
-// Regular client (uses anon key, subject to RLS)
+// Main client used by routes. 
+// SECURITY: We use the service role key here so the backend can bypass RLS.
+// This allows us to lock down the database for public/anon access while the
+// backend continues to function. The backend handles its own RBAC (admin/user).
 export const supabase = createClient(
     config.supabase.url,
-    config.supabase.anonKey
+    config.supabase.serviceRoleKey || config.supabase.anonKey
 );
 
 // Check if service role key is available
 const hasServiceRoleKey = !!config.supabase.serviceRoleKey && config.supabase.serviceRoleKey.length > 0;
 if (!hasServiceRoleKey) {
-    console.warn('[Database] WARNING: SUPABASE_SERVICE_ROLE_KEY is not configured!');
-    console.warn('[Database] supabaseAdmin will fallback to anon key and RLS will apply.');
-    console.warn('[Database] This may cause INSERT operations to fail if RLS policies block them.');
+    console.error('[Database] CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing!');
+    console.error('[Database] RLS policies will block all backend operations if they are enabled.');
 }
 
 // Admin client for storage operations (uses service role key, bypasses RLS)
