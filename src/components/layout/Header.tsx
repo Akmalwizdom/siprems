@@ -1,9 +1,9 @@
-import { Settings, LogOut, Menu } from 'lucide-react';
+import { Settings, LogOut, Menu, Bell, Search, User, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-
 import { NotificationCenter } from '../../features/notifications';
+import { Button } from '../ui/button';
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -16,28 +16,23 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
   const navigate = useNavigate();
 
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return (
+      name
+        ?.split(' ')
+        .map((word) => word.charAt(0))
+        .join('')
+        .toUpperCase()
+        .slice(0, 2) || 'A'
+    );
   };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node))
         setIsOpen(false);
-      }
     };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
   const handleLogout = async () => {
@@ -50,145 +45,88 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
   };
 
   return (
-    <>
-      <style>{`
-        /* Header Critical CSS */
-        .header-root {
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          background-color: white;
-          /* border-bottom removed */
-          padding: 1rem;
-        }
+    <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-white/20 bg-white/40 px-4 backdrop-blur-md lg:px-8">
+      <div className="flex flex-1 items-center gap-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenMobileSidebar}
+          className="hover:bg-bronze-50 rounded-xl lg:hidden"
+        >
+          <Menu className="text-bronze-600 h-6 w-6" />
+        </Button>
 
-        /* Profile Avatar Sizing */
-        .profile-avatar {
-          width: 36px;
-          height: 36px;
-          border-radius: 9999px;
-          object-fit: cover;
-        }
+        <div className="group focus-within:ring-bronze-400/20 hidden w-80 items-center rounded-2xl border border-white/40 bg-slate-100/50 px-4 py-2 transition-all focus-within:ring-2 sm:flex">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Cari fitur atau data..."
+            className="ml-3 w-full border-none bg-transparent text-sm font-medium text-slate-600 placeholder:text-slate-400 focus:ring-0"
+          />
+        </div>
+      </div>
 
-        .profile-fallback {
-            width: 36px;
-            height: 36px;
-            border-radius: 9999px;
-            background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
+      <div className="flex items-center gap-4">
+        {/* Simplified Notification Center integration */}
+        <div className="group relative flex h-10 w-10 items-center justify-center rounded-xl border border-white bg-white/60 shadow-sm transition-all hover:shadow-md">
+          <NotificationCenter />
+        </div>
 
-        /* User Info Visibility */
-        .user-info-desktop {
-          display: none;
-        }
+        <div className="mx-2 hidden h-8 w-px bg-slate-200 md:block"></div>
 
-        /* Large Screen Styles */
-        @media (min-width: 1024px) { /* lg */
-          .mobile-menu-trigger {
-            display: none !important;
-          }
-          
-          .header-root {
-            padding-left: 2rem;
-            padding-right: 2rem;
-          }
-          
-          .profile-avatar, .profile-fallback {
-            width: 40px;
-            height: 40px;
-          }
-        }
+        <div className="relative" ref={dropdownRef}>
+          <div
+            className="group flex cursor-pointer items-center gap-3 rounded-2xl p-1 pr-2 transition-all hover:bg-white/60"
+            onClick={() => setIsOpen(!isOpen)}
+          >
+            <div className="hidden text-right md:block">
+              <p className="text-xs leading-none font-black text-slate-900">
+                {user?.displayName || 'Administrator'}
+              </p>
+              <p className="text-bronze-600 mt-1 text-[10px] font-bold tracking-tighter uppercase">
+                Owner & CEO
+              </p>
+            </div>
 
-        /* Medium Screen Styles */
-        @media (min-width: 768px) { /* md */
-           .user-info-desktop {
-              display: flex;
-              flex-direction: column;
-              text-align: right;
-           }
-        }
-      `}</style>
-      
-      <header className="header-root">
-        <div className="flex items-center justify-between">
-          {/* Left section - Mobile menu */}
-          <div className="flex items-center gap-4 flex-1">
-            {/* Mobile Menu Button */}
-            <button
-              onClick={onOpenMobileSidebar}
-              className="mobile-menu-trigger p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Right section - Notification + Profile */}
-          <div className="flex items-center gap-2 lg:gap-4">
-            {/* Notification Center */}
-            <NotificationCenter />
-            <div className="relative pl-2 lg:pl-4" ref={dropdownRef}>
-              <div 
-                className="flex items-center gap-2 lg:gap-3 cursor-pointer"
-                onClick={() => setIsOpen(!isOpen)}
-              >
-                {/* User info - hidden on mobile */}
-                <div className="user-info-desktop">
-                  <p className="text-slate-900 font-bold text-sm">{user?.displayName || 'User'}</p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
-                </div>
-                {user?.photoURL ? (
-                  <img 
-                    src={user.photoURL} 
-                    alt={user.displayName || 'User'} 
-                    className="profile-avatar"
-                  />
-                ) : (
-                  <div className="profile-fallback">
-                    <span>
-                      {getInitials(user?.displayName || user?.email || 'U')}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {isOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                  {/* User info for mobile */}
-                  <div className="md:hidden px-4 py-2 border-b border-gray-200">
-                    <p className="text-slate-900 font-bold text-sm">{user?.displayName || 'User'}</p>
-                    <p className="text-xs text-gray-500">{user?.email}</p>
-                  </div>
-
-                  <Link
-                    to="/settings"
-                    className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Settings className="w-4 h-4 text-slate-600" />
-                    <span className="text-slate-700">Pengaturan</span>
-                  </Link>
-                  
-                  <div className="my-2 border-t border-gray-200"></div>
-                  
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 transition-colors text-red-600"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Keluar</span>
-                  </button>
-                </div>
+            <div className="bronze-gradient shadow-bronze-200/50 relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl font-bold text-white shadow-lg transition-transform group-hover:scale-105">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <span>{getInitials(user?.displayName || 'Admin')}</span>
               )}
             </div>
+            <ChevronDown
+              className={`h-4 w-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+            />
           </div>
+
+          {isOpen && (
+            <div className="animate-in fade-in zoom-in-95 absolute right-0 z-50 mt-3 w-64 rounded-3xl border border-slate-100 bg-white py-3 shadow-2xl duration-200">
+              <div className="mb-2 border-b border-slate-50 px-5 py-3">
+                <p className="text-sm font-black text-slate-900">{user?.displayName || 'Admin'}</p>
+                <p className="truncate text-xs text-slate-400">{user?.email}</p>
+              </div>
+
+              <Link
+                to="/settings"
+                className="hover:bg-bronze-50 hover:text-bronze-700 flex items-center gap-3 px-5 py-2.5 text-sm font-bold text-slate-600 transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <Settings className="h-4 w-4" />
+                <span>Pengaturan Akun</span>
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm font-bold text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-600"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Keluar Sesi</span>
+              </button>
+            </div>
+          )}
         </div>
-      </header>
-    </>
+      </div>
+    </header>
   );
 }
