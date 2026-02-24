@@ -1,3 +1,4 @@
+
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 prophet==1.1.6
@@ -8,3 +9,4 @@ sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 scikit-learn==1.5.2
 python-dotenv==1.0.1
+requests==2.32.3

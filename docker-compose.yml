@@ -70,7 +70,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./public:/app/public
-      - ./vite.config.ts:/app/vite.config.ts
+      - ./vite.config.mts:/app/vite.config.mts
       - ./index.html:/app/index.html
     environment:
       - VITE_API_BASE_URL=http://localhost:8000/api
