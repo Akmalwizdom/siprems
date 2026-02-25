@@ -18,19 +18,19 @@ WIB = ZoneInfo(TIMEZONE)
 os.environ["TZ"] = TIMEZONE
 
 # Training Configuration
-TRAINING_WINDOW_DAYS = int(os.getenv("TRAINING_WINDOW_DAYS", 365))  # Use ALL available data (up to 1 year)
-MIN_TRAINING_DAYS = int(os.getenv("MIN_TRAINING_DAYS", 30))      # Lowered to allow training with less data
-VALIDATION_DAYS = int(os.getenv("VALIDATION_DAYS", 14))
+TRAINING_WINDOW_DAYS = 365  # Use ALL available data (up to 1 year)
+MIN_TRAINING_DAYS = 30      # Lowered to allow training with less data
+VALIDATION_DAYS = 14
 
 # Data size thresholds for adaptive configuration
 SHORT_DATA_THRESHOLD = 90   # < 90 days = short data
 MEDIUM_DATA_THRESHOLD = 180 # 90-180 days = medium data
 
 # Retraining Configuration
-AUTO_RETRAIN_ENABLED = os.getenv("AUTO_RETRAIN_ENABLED", "True").lower() == "true"
-RETRAIN_SCHEDULE = os.getenv("RETRAIN_SCHEDULE", "daily")
-RETRAIN_TIME = os.getenv("RETRAIN_TIME", "02:00")
-MIN_ACCURACY_THRESHOLD = float(os.getenv("MIN_ACCURACY_THRESHOLD", 82.0))
+AUTO_RETRAIN_ENABLED = True
+RETRAIN_SCHEDULE = "daily"
+RETRAIN_TIME = "02:00"
+MIN_ACCURACY_THRESHOLD = 82.0
 RETRAIN_ON_ACCURACY_DROP = True
 
 # Model Configuration
@@ -142,8 +142,8 @@ REGRESSOR_PRIOR_SCALES = {
     "is_payday": 0.06,
     "is_day_before_holiday": 0.06,
     "is_school_holiday": 0.04,
-    "is_month_start": float(os.getenv("PRIOR_SCALE_MONTH_START", 0.05)),
-    "is_month_end": float(os.getenv("PRIOR_SCALE_MONTH_END", 0.05)),
+    "is_month_start": 0.05,
+    "is_month_end": 0.05,
 }
 
 # ============================================================

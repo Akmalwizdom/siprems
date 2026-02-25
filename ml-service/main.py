@@ -15,7 +15,6 @@ from sqlalchemy import create_engine
 # Import local modules
 from model_trainer import ModelTrainer
 from predictor import predictor
-from model_monitor import ModelMonitor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,15 +27,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS — ML service should only be accessed by the backend, not browsers directly
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://siprems-backend-ts:8000").split(",")
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in ALLOWED_ORIGINS],
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Database connection
@@ -46,9 +43,8 @@ if not DATABASE_URL:
 
 engine = create_engine(DATABASE_URL)
 
-# Initialize trainer and monitor
+# Initialize trainer
 trainer = ModelTrainer(engine)
-monitor = ModelMonitor(engine)
 
 
 # ===== REQUEST MODELS =====
@@ -224,29 +220,6 @@ def get_model_status(store_id: str):
     except Exception as e:
         logger.error(f"Get model status failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get model status: {str(e)}")
-
-
-@app.post("/ml/monitor/drift")
-def check_model_drift(store_id: str = "main_store"):
-    """
-    Check for model drift by comparing realizations with past predictions.
-    
-    Args:
-        store_id: Store identifier
-        
-    Returns:
-        Drift analysis results
-    """
-    try:
-        result = monitor.check_drift(store_id)
-        if result.get("status") == "error":
-            raise HTTPException(status_code=400, detail=result.get("reason"))
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Drift check failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Drift check failed: {str(e)}")
 
 
 # ===== CATEGORY-LEVEL ENDPOINTS =====

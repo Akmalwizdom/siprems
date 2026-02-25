@@ -20,16 +20,15 @@ services:
       - ML_SERVICE_URL=http://ml-service:8001
       - PORT=8000
     depends_on:
-      ml-service:
-        condition: service_healthy
+      - ml-service
     networks:
-      - frontend-net
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.50'
+      - siprems-network
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # ===================================
   # ML SERVICE Python – Prophet Models
@@ -46,14 +45,15 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - PORT=8001
     volumes:
-      - model_data:/app/models
+      - model_data:/app/models # Model persistence
     networks:
-      - backend-net
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '1.0'
+      - siprems-network
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # ===================================
   # FRONTEND – React/Vite
@@ -61,8 +61,8 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
-      target: development # Toggle to "production" for production mode
+      dockerfile: Dockerfile
+      target: development # Change to "production" for production builds
     container_name: siprems-frontend
     restart: unless-stopped
     ports:
@@ -70,40 +70,33 @@ services:
     volumes:
       - ./src:/app/src
       - ./public:/app/public
-      - ./vite.config.mts:/app/vite.config.mts
+      - ./vite.config.ts:/app/vite.config.ts
       - ./index.html:/app/index.html
     environment:
       - VITE_API_BASE_URL=http://localhost:8000/api
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
-      - frontend-net
+      - siprems-network
 
   # ===================================
-  # RETRAIN SCHEDULER
+  # RETRAIN SCHEDULER (Optional)
   # ===================================
   retrain-scheduler:
     build:
-      context: ./ml-service # Fixed context (was non-existent ./backend)
-      dockerfile: Dockerfile # Reuse ML Dockerfile or specific one if needed
+      context: ./backend
+      dockerfile: Dockerfile.scheduler
     container_name: siprems-retrain-scheduler
     restart: unless-stopped
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - ML_SERVICE_URL=http://ml-service:8001
     depends_on:
-      ml-service:
-        condition: service_healthy
+      - ml-service
     networks:
-      - backend-net
+      - siprems-network
     profiles:
-      - scheduler
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.25'
+      - scheduler # Only start with: docker compose --profile scheduler up
 
 # ===================================
 # VOLUMES
@@ -116,8 +109,5 @@ volumes:
 # NETWORKS
 # ===================================
 networks:
-  frontend-net:
+  siprems-network:
     driver: bridge
-  backend-net:
-    driver: bridge
-    internal: true # Isolate ML service from public access

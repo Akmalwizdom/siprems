@@ -73,6 +73,7 @@ export interface RestockRecommendation {
   recommendedRestock: number;
   urgency: 'low' | 'medium' | 'high';
   category?: string;
+  // Enhanced fields from ProductForecastService
   safetyStock?: number;
   daysOfStock?: number;
   confidence?: number;
@@ -81,24 +82,12 @@ export interface RestockRecommendation {
   salesProportion?: number;
 }
 
-export interface CalendarEvent {
-  id: string;
+export interface CalendarEventType {
   date: string;
   type: 'promotion' | 'holiday' | 'store-closed' | 'event';
-  title: string;
-  description?: string;
-  impact: number;
-  prediction?: {
-    impact: number;
-    title: string;
-    description: string;
-    suggestedLevel: number;
-  };
+  title?: string;
+  impact?: number;
 }
-
-// Alias for legacy support
-export type Event = CalendarEvent;
-export type CalendarEventType = CalendarEvent;
 
 export interface PredictionResponseMeta {
   applied_factor: number;

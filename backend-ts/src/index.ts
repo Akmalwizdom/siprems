@@ -1,79 +1,20 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { config } from './config';
-import logger from './config/logger';
-import { errorHandler } from './middleware/error-handler';
 
 const app = express();
 
-// ─── Security Middleware ────────────────────────────────────
-// Helmet: Sets various HTTP security headers (XSS, HSTS, etc.)
-app.use(helmet());
-
-// CORS: Restrict to allowed origins only (no open wildcard)
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-    : ['http://localhost:3000', 'http://localhost:5173'];
-
-app.use(
-    cors({
-        origin: (origin, callback) => {
-            // Allow requests with no origin (server-to-server, curl, etc.)
-            if (!origin) return callback(null, true);
-            if (allowedOrigins.includes(origin)) {
-                return callback(null, true);
-            }
-            return callback(new Error(`CORS: Origin ${origin} not allowed`));
-        },
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
-    })
-);
-
-// Request logging middleware (Added)
-app.use((req, res, next) => {
-    logger.info({ method: req.method, path: req.path, ip: req.ip }, 'Incoming Request');
-    next();
-});
-
-// Rate Limiting: Prevent brute force and DoS attacks
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15-minute window
-    max: 200, // Max 200 requests per window per IP
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many requests, please try again later' },
-});
-app.use('/api/', apiLimiter);
-
-// Stricter rate limit for auth-related endpoints
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20, // Max 20 auth attempts per 15 minutes
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many authentication attempts, please try again later' },
-});
-app.use('/api/users/login', authLimiter);
-app.use('/api/users/register', authLimiter);
-
-// ─── Body Parsing ───────────────────────────────────────────
-app.use(express.json({ limit: '10mb' })); // Allow base64 image uploads
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' })); // Increased for base64 image uploads
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ─── Health Check ───────────────────────────────────────────
-app.get('/health', (_req, res) => {
-    res.json({
-        status: 'ok',
-        service: 'siprems-backend-ts',
-        timestamp: new Date().toISOString(),
-    });
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'siprems-backend-ts' });
 });
 
-// ─── API Routes ─────────────────────────────────────────────
+// API routes
 import transactionsRouter from './routes/transactions';
 import productsRouter from './routes/products';
 import eventsRouter from './routes/events';
@@ -99,16 +40,19 @@ app.use('/api/users', usersRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/categories', categoriesRouter);
 
-// ─── Error Handling ─────────────────────────────────────────
-app.use(errorHandler);
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Error:', err);
+    res.status(err.status || 500).json({
+        error: err.message || 'Internal Server Error',
+    });
+});
 
-// ─── Start Server ───────────────────────────────────────────
-const PORT = config.port || 8000;
+// Start server
+const PORT = config.port;
 app.listen(PORT, () => {
-    logger.info(`✅ Backend TS running on http://localhost:${PORT}`);
-    logger.info(`📊 Health check: http://localhost:${PORT}/health`);
-    logger.info(`🔒 CORS origins: ${allowedOrigins.join(', ')}`);
-    logger.info(`🛡️ Rate limiting: 200 req/15min (API), 20 req/15min (Auth)`);
+    console.log(`✅ Backend TS running on http://localhost:${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
 
 export default app;
