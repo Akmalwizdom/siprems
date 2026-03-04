@@ -32,10 +32,15 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^3.10.2",
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.7.2",
     "vite": "6.3.5"
   },
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "generate:api-types": "openapi-typescript docs/api/openapi.yaml -o src/types/api.generated.ts",
+    "test:contract": "node scripts/check-openapi-contract.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "start": "npx serve dist -s -l ${PORT:-3000}"

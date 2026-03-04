@@ -1,24 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 
-// Regular client (uses anon key, subject to RLS)
-export const supabase = createClient(
-    config.supabase.url,
-    config.supabase.anonKey
-);
-
-// Check if service role key is available
+const dbApiKey = config.supabase.serviceRoleKey || config.supabase.anonKey;
 const hasServiceRoleKey = !!config.supabase.serviceRoleKey && config.supabase.serviceRoleKey.length > 0;
+
 if (!hasServiceRoleKey) {
-    console.warn('[Database] WARNING: SUPABASE_SERVICE_ROLE_KEY is not configured!');
-    console.warn('[Database] supabaseAdmin will fallback to anon key and RLS will apply.');
-    console.warn('[Database] This may cause INSERT operations to fail if RLS policies block them.');
+    console.warn('[Database] WARNING: SUPABASE_SERVICE_ROLE_KEY is not configured.');
+    console.warn('[Database] Backend will use anon key and remain affected by RLS policies.');
+    console.warn('[Database] For Phase 2 hardening, configure SUPABASE_SERVICE_ROLE_KEY.');
 }
 
-// Admin client for storage operations (uses service role key, bypasses RLS)
+// Backend server client. Prefer service role key for trusted server-side access.
+export const supabase = createClient(
+    config.supabase.url,
+    dbApiKey
+);
+
+// Admin client for storage operations (same key strategy as supabase client)
 export const supabaseAdmin = createClient(
     config.supabase.url,
-    config.supabase.serviceRoleKey || config.supabase.anonKey
+    dbApiKey
 );
 
 // Helper function for common database operations
@@ -95,10 +96,33 @@ export const db = {
             return data;
         },
 
+        async getById(id: string) {
+            const { data, error } = await supabase
+                .from('calendar_events')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
         async create(event: any) {
             const { data, error } = await supabase
                 .from('calendar_events')
                 .insert(event)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id: string, updates: any) {
+            const { data, error } = await supabase
+                .from('calendar_events')
+                .update(updates)
+                .eq('id', id)
                 .select()
                 .single();
 
