@@ -4,7 +4,10 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci --silent
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    (npm ci --silent || (sleep 5 && npm ci --silent))
 
 # Development stage
 FROM base AS development

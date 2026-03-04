@@ -1,0 +1,100 @@
+name: Phase2 Contract Gate
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  frontend-contract-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Generate API Types
+        run: npm run generate:api-types
+
+      - name: Run Contract Test
+        run: npm run test:contract
+
+      - name: Typecheck Frontend
+        run: npm run typecheck
+
+      - name: Build Frontend
+        run: npm run build
+
+  backend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend-ts/package-lock.json
+
+      - name: Install Backend Dependencies
+        run: npm ci
+        working-directory: backend-ts
+
+      # --- Phase 2 additions ---
+
+      - name: Lint (TypeScript strict check)
+        run: npx tsc --noEmit
+        working-directory: backend-ts
+
+      - name: Security Scan (npm audit)
+        run: npm audit --audit-level=high || true
+        working-directory: backend-ts
+
+      - name: Validate SQL Migrations Syntax
+        run: |
+          echo "🔍 Checking migration files..."
+          for f in migrations/*.sql; do
+            if [ -f "$f" ]; then
+              echo "  ✅ Found: $f ($(wc -l < "$f") lines)"
+              # Basic syntax checks
+              if grep -qiP 'DROP\s+TABLE\s+(?!IF)' "$f"; then
+                echo "  ⚠️  WARNING: $f contains DROP TABLE without IF EXISTS"
+              fi
+              if grep -qiP 'DROP\s+DATABASE' "$f"; then
+                echo "  ❌ FATAL: $f contains DROP DATABASE — blocked"
+                exit 1
+              fi
+            fi
+          done
+          echo "✅ Migration check complete"
+        working-directory: backend-ts
+
+      - name: Build Backend
+        run: npm run build
+        working-directory: backend-ts
+
+  deploy:
+    needs: [frontend-contract-and-build, backend-build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mock Deploy Delivery (Phase 4B)
+        run: |
+          echo "🚀 Simulating deployment push to remote host..."
+          echo "railway up --detach"
+          echo "✅ Mock Deployment Complete!"

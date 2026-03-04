@@ -1,0 +1,990 @@
+openapi: 3.0.3
+info:
+  title: SIPREMS API
+  description: Sistem Prediksi Stok Musiman — Backend API
+  version: 2.0.0
+
+servers:
+  - url: /api/v1
+    description: Canonical API (Phase 2)
+  - url: /api
+    description: Backward compatibility
+
+# ========================
+# Security
+# ========================
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID Token
+
+  schemas:
+    # ---- Envelope ----
+    SuccessEnvelope:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+        meta:
+          type: object
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+
+    # ---- Product ----
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string }
+        sku: { type: string, nullable: true }
+        stock: { type: integer }
+        selling_price: { type: number }
+        cost_price: { type: number, nullable: true }
+        image_url: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CreateProductInput:
+      type: object
+      required: [name, category, selling_price]
+      properties:
+        name: { type: string, minLength: 1 }
+        category: { type: string, minLength: 1 }
+        sku: { type: string }
+        stock: { type: integer, minimum: 0, default: 0 }
+        selling_price: { type: number, minimum: 0 }
+        cost_price: { type: number, minimum: 0 }
+        image_url: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+
+    UpdateProductInput:
+      type: object
+      properties:
+        stock: { type: integer, minimum: 0 }
+        price: { type: number, minimum: 0 }
+        name: { type: string, minLength: 1 }
+        category: { type: string, minLength: 1 }
+        selling_price: { type: number, minimum: 0 }
+        cost_price: { type: number, minimum: 0 }
+        description: { type: string, nullable: true }
+
+    # ---- Transaction ----
+    TransactionItem:
+      type: object
+      required: [product_id, quantity, unit_price, subtotal]
+      properties:
+        product_id: { type: integer }
+        quantity: { type: integer, minimum: 1 }
+        unit_price: { type: number, minimum: 0 }
+        subtotal: { type: number, minimum: 0 }
+
+    CreateTransactionInput:
+      type: object
+      required: [items, total_amount]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TransactionItem" }
+          minItems: 1
+        total_amount: { type: number, minimum: 0 }
+        payment_method: { type: string, default: Cash }
+        order_types: { type: string, default: dine-in }
+        items_count: { type: integer }
+
+    Transaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        total_amount: { type: number }
+        payment_method: { type: string }
+        order_types: { type: string }
+        items_count: { type: integer }
+        date: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TransactionItem" }
+
+    # ---- Event ----
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        date: { type: string, format: date }
+        title: { type: string }
+        type: { type: string, enum: [promotion, holiday, store-closed, event] }
+        description: { type: string, nullable: true }
+        impact_weight: { type: number }
+
+    CreateEventInput:
+      type: object
+      required: [date, title]
+      properties:
+        date: { type: string, format: date }
+        title: { type: string, minLength: 1 }
+        type:
+          {
+            type: string,
+            enum: [promotion, holiday, store-closed, event],
+            default: event,
+          }
+        description: { type: string, nullable: true }
+        impact_weight: { type: number, minimum: 0, maximum: 10, default: 1.0 }
+
+    # ---- Chat ----
+    ChatMessage:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 2000 }
+        predictionData: { type: object, nullable: true }
+        chatHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              role: { type: string }
+              content: { type: string }
+
+    # ---- User ----
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string, nullable: true }
+        avatar_url: { type: string, nullable: true }
+        role: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UpdateUserRole:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [user, admin] }
+
+    # ---- Store Settings ----
+    StoreSettings:
+      type: object
+      properties:
+        name: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        logo_url: { type: string }
+
+    # ---- Category ----
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    # ---- Holiday ----
+    Holiday:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        name: { type: string }
+        type: { type: string }
+
+    # ---- Dashboard ----
+    DashboardMetrics:
+      type: object
+      properties:
+        totalRevenue: { type: number }
+        totalTransactions: { type: integer }
+        totalItemsSold: { type: integer }
+        revenueChange: { type: number }
+        transactionsChange: { type: number }
+        itemsChange: { type: number }
+
+    SalesChartEntry:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        sales: { type: number }
+        transactions_count: { type: integer }
+
+    CategorySalesEntry:
+      type: object
+      properties:
+        category: { type: string }
+        value: { type: number }
+        color: { type: string }
+
+    # ---- Forecast ----
+    ForecastResponse:
+      type: object
+      properties:
+        predictions:
+          type: array
+          items:
+            type: object
+        model_info:
+          type: object
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+    LimitParam:
+      name: limit
+      in: query
+      schema: { type: integer, default: 10 }
+
+# ========================
+# Paths
+# ========================
+paths:
+  # ---------- Products ----------
+  /products:
+    get:
+      tags: [Products]
+      summary: List products with pagination
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  total: { type: integer }
+                  total_pages: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      tags: [Products]
+      summary: Create a product (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductInput" }
+      responses:
+        "200":
+          description: Product created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by ID
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product detail
+        "404":
+          description: Not found
+    patch:
+      tags: [Products]
+      summary: Update product (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProductInput" }
+      responses:
+        "200":
+          description: Product updated
+    delete:
+      tags: [Products]
+      summary: Delete product (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product deleted
+
+  /products/categories:
+    get:
+      tags: [Products]
+      summary: List product category names
+      security: []
+      responses:
+        "200":
+          description: Category name list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items: { type: string }
+
+  /products/{id}/image:
+    post:
+      tags: [Products]
+      summary: Upload product image (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, description: Base64 data URL }
+      responses:
+        "200":
+          description: Image uploaded
+
+  # ---------- Transactions ----------
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: List transactions with pagination
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: startDate
+          in: query
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Paginated transactions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+    post:
+      tags: [Transactions]
+      summary: Create transaction (atomic)
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+          description: Optional idempotency key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTransactionInput" }
+      responses:
+        "200":
+          description: Transaction created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+        "409":
+          description: Insufficient stock
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------- Events ----------
+  /events:
+    get:
+      tags: [Events]
+      summary: List all calendar events
+      security: []
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Event" }
+    post:
+      tags: [Events]
+      summary: Create event (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEventInput" }
+      responses:
+        "200":
+          description: Event created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+
+  /events/{id}:
+    put:
+      tags: [Events]
+      summary: Update event (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEventInput" }
+      responses:
+        "200":
+          description: Event updated
+    delete:
+      tags: [Events]
+      summary: Delete event (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event deleted
+
+  /events/suggest:
+    post:
+      tags: [Events]
+      summary: AI event classification suggestion (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                date: { type: string }
+      responses:
+        "200":
+          description: AI suggestion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+
+  /events/{id}/calibrate:
+    post:
+      tags: [Events]
+      summary: Calibrate event impact (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Calibration result
+
+  /events/{id}/history:
+    get:
+      tags: [Events]
+      summary: Event calibration history (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Calibration history
+
+  # ---------- Dashboard ----------
+  /dashboard/metrics:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard aggregated metrics
+      security: []
+      parameters:
+        - name: range
+          in: query
+          schema:
+            { type: string, enum: [today, week, month, year], default: month }
+      responses:
+        "200":
+          description: Metric totals and percentage changes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardMetrics" }
+
+  /dashboard/sales-chart:
+    get:
+      tags: [Dashboard]
+      summary: Sales chart data (last 90 days)
+      security: []
+      responses:
+        "200":
+          description: Array of daily sales entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SalesChartEntry" }
+
+  /dashboard/category-sales:
+    get:
+      tags: [Dashboard]
+      summary: Category sales breakdown (last 90 days)
+      security: []
+      responses:
+        "200":
+          description: Array of category revenue entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CategorySalesEntry" }
+
+  /dashboard/sales-trend:
+    get:
+      tags: [Dashboard]
+      summary: Sales trend (last 7 days)
+      security: []
+      responses:
+        "200":
+          description: Trend data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  trend:
+                    type: array
+                    items:
+                      type: object
+
+  /dashboard/today:
+    get:
+      tags: [Dashboard]
+      summary: Today's summary with product breakdown
+      security: []
+      responses:
+        "200":
+          description: Today's metrics and top products
+
+  # ---------- Chat ----------
+  /chat:
+    post:
+      tags: [Chat]
+      summary: AI chat with prediction context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatMessage" }
+      responses:
+        "200":
+          description: AI response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------- Users ----------
+  /users:
+    get:
+      tags: [Users]
+      summary: List all users (Admin)
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  total_pages: { type: integer }
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+    put:
+      tags: [Users]
+      summary: Update own profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                avatar_url: { type: string }
+      responses:
+        "200":
+          description: Updated profile
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: User detail
+        "404":
+          description: Not found
+    delete:
+      tags: [Users]
+      summary: Delete user (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: User deleted
+
+  /users/{id}/role:
+    put:
+      tags: [Users]
+      summary: Update user role (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUserRole" }
+      responses:
+        "200":
+          description: Role updated
+
+  /users/avatar:
+    post:
+      tags: [Users]
+      summary: Upload user avatar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, description: Base64 data URL }
+      responses:
+        "200":
+          description: Avatar uploaded
+
+  # ---------- Settings ----------
+  /settings/store:
+    get:
+      tags: [Settings]
+      summary: Get store settings
+      security: []
+      responses:
+        "200":
+          description: Store settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  data: { $ref: "#/components/schemas/StoreSettings" }
+    put:
+      tags: [Settings]
+      summary: Update store settings (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreSettings" }
+      responses:
+        "200":
+          description: Settings updated
+
+  /settings/store/logo:
+    post:
+      tags: [Settings]
+      summary: Upload store logo (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, description: Base64 data URL }
+      responses:
+        "200":
+          description: Logo uploaded
+
+  # ---------- Categories ----------
+  /categories:
+    get:
+      tags: [Categories]
+      summary: List all categories
+      security: []
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  categories:
+                    type: array
+                    items: { $ref: "#/components/schemas/Category" }
+    post:
+      tags: [Categories]
+      summary: Create category (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+                description: { type: string }
+      responses:
+        "200":
+          description: Category created
+        "409":
+          description: Duplicate name
+
+  /categories/{id}:
+    patch:
+      tags: [Categories]
+      summary: Update category (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        "200":
+          description: Category updated
+        "409":
+          description: Duplicate name
+    delete:
+      tags: [Categories]
+      summary: Delete category (Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Category deleted
+        "400":
+          description: Category in use
+
+  # ---------- Holidays ----------
+  /holidays/{year}:
+    get:
+      tags: [Holidays]
+      summary: Get holidays for a year
+      security: []
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        "200":
+          description: Holiday list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  year: { type: integer }
+                  count: { type: integer }
+                  holidays:
+                    type: array
+                    items: { $ref: "#/components/schemas/Holiday" }
+
+  /holidays/{year}/{month}:
+    get:
+      tags: [Holidays]
+      summary: Get holidays for a month
+      security: []
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: month
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 12 }
+      responses:
+        "200":
+          description: Monthly holiday list
+
+  # ---------- Forecast ----------
+  /forecast/train:
+    post:
+      tags: [Forecast]
+      summary: Train forecast model (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [store_id]
+              properties:
+                store_id: { type: string }
+                end_date: { type: string, format: date }
+                force_retrain: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Training started
+
+  /forecast/predict:
+    post:
+      tags: [Forecast]
+      summary: Get forecast predictions (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [store_id]
+              properties:
+                store_id: { type: string }
+                periods: { type: integer, default: 30 }
+                events: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Predictions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ForecastResponse" }
+
+  /forecast/predict/{storeId}:
+    post:
+      tags: [Forecast]
+      summary: Get forecast predictions (Canonical Path)
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                periods: { type: integer }
+                events: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Predictions
+
+  /forecast/model/accuracy:
+    get:
+      tags: [Forecast]
+      summary: Get model accuracy (Admin)
+      parameters:
+        - name: store_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Accuracy metrics

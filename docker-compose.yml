@@ -20,7 +20,8 @@ services:
       - ML_SERVICE_URL=http://ml-service:8001
       - PORT=8000
     depends_on:
-      - ml-service
+      ml-service:
+        condition: service_healthy
     networks:
       - siprems-network
     healthcheck:
@@ -49,7 +50,7 @@ services:
     networks:
       - siprems-network
     healthcheck:
-      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')" ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -61,7 +62,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.frontend
       target: development # Change to "production" for production builds
     container_name: siprems-frontend
     restart: unless-stopped
@@ -74,8 +75,15 @@ services:
       - ./index.html:/app/index.html
     environment:
       - VITE_API_BASE_URL=http://localhost:8000/api
+      - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
+      - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
+      - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+      - VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET}
+      - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
+      - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - siprems-network
 
@@ -84,15 +92,17 @@ services:
   # ===================================
   retrain-scheduler:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.scheduler
+      context: ./ml-service
+      dockerfile: Dockerfile
     container_name: siprems-retrain-scheduler
-    restart: unless-stopped
+    restart: "no"
+    command: [ "python", "/app/train_on_startup.py" ]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - ML_SERVICE_URL=http://ml-service:8001
     depends_on:
-      - ml-service
+      ml-service:
+        condition: service_healthy
     networks:
       - siprems-network
     profiles:
