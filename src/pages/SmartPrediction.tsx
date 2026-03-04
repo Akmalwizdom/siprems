@@ -113,9 +113,6 @@ export function SmartPrediction() {
       } else {
         setDataFreshnessWarning(null);
       }
-      
-      if (result.status === 'success') {
-      }
     } catch (error) {
       console.error('Error fetching forecast accuracy:', error);
       setForecastAccuracy(null);
@@ -180,6 +177,89 @@ export function SmartPrediction() {
     }
   };
 
+  /**
+   * Area 2 Refactor: Safely prepare prediction data for AI context, avoiding large nested objects.
+   */
+  const preparePredictionPayload = (): PredictionResponse | null => {
+    if (predictionData.length === 0) return null;
+
+    const safeRecommendations = (restockRecommendations || []).map(r => ({
+      productId: r?.productId ?? '',
+      productName: r?.productName ?? 'Unknown',
+      currentStock: r?.currentStock ?? 0,
+      predictedDemand: r?.predictedDemand ?? 0,
+      recommendedRestock: r?.recommendedRestock ?? 0,
+      urgency: r?.urgency ?? 'low',
+      category: r?.category ?? undefined,
+    }));
+
+    const safeEventAnnotations = (eventAnnotations || []).map(e => ({
+      date: e?.date ?? '',
+      titles: e?.titles ?? [],
+      types: e?.types ?? [],
+    }));
+
+    return {
+      status: 'success',
+      chartData: predictionData,
+      recommendations: safeRecommendations,
+      eventAnnotations: safeEventAnnotations,
+      meta: {
+        applied_factor: predictionMeta?.applied_factor ?? 1,
+        forecastDays: predictionMeta?.forecastDays ?? 0,
+        accuracy: predictionMeta?.accuracy,
+      },
+    } as PredictionResponse;
+  };
+
+  /**
+   * Area 2 Refactor: Validate and set pending action based on AI response.
+   */
+  const validateAndSetPendingAction = (action: CommandAction) => {
+    if (!action || !action.type || action.type === 'none' || !action.needsConfirmation) return;
+
+    // For bulk_restock, check if there are products to restock
+    if (action.type === 'bulk_restock') {
+      const productsNeedingRestock = (restockRecommendations || []).filter(r => (r.recommendedRestock || 0) > 0);
+      if (productsNeedingRestock.length === 0) {
+        setChatMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: 'Tidak ada produk yang membutuhkan restock saat ini. Semua stok sudah mencukupi.' },
+        ]);
+        return;
+      }
+    }
+    
+    // For single restock, validate product exists and quantity is valid
+    if (action.type === 'restock') {
+      if (!action.productId || !action.productName) {
+        setChatMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: 'Produk tidak ditemukan dalam rekomendasi. Silakan cek nama produk.' },
+        ]);
+        return;
+      }
+      if (action.quantity == null || action.quantity <= 0) {
+        setChatMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: 'Jumlah restock harus lebih dari 0.' },
+        ]);
+        return;
+      }
+    }
+    
+    // Safely set pending action with validated data
+    const safeAction: CommandAction = {
+      type: action.type,
+      productId: action.productId ?? null,
+      productName: action.productName ?? null,
+      quantity: action.quantity ?? null,
+      needsConfirmation: action.needsConfirmation,
+    };
+    
+    setPendingAction(safeAction);
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
 
@@ -194,34 +274,7 @@ export function SmartPrediction() {
     setChatMessages(updatedMessages);
 
     try {
-      // Safely prepare prediction data, avoiding large nested objects
-      const safeRecommendations = (restockRecommendations || []).map(r => ({
-        productId: r?.productId ?? '',
-        productName: r?.productName ?? 'Unknown',
-        currentStock: r?.currentStock ?? 0,
-        predictedDemand: r?.predictedDemand ?? 0,
-        recommendedRestock: r?.recommendedRestock ?? 0,
-        urgency: r?.urgency ?? 'low',
-        category: r?.category ?? undefined,
-      }));
-
-      const safeEventAnnotations = (eventAnnotations || []).map(e => ({
-        date: e?.date ?? '',
-        titles: e?.titles ?? [],
-        types: e?.types ?? [],
-      }));
-
-      const fullPredictionData: PredictionResponse | null = predictionData.length > 0 ? {
-        status: 'success',
-        chartData: predictionData,
-        recommendations: safeRecommendations,
-        eventAnnotations: safeEventAnnotations,
-        meta: {
-          applied_factor: predictionMeta?.applied_factor ?? 1,
-          forecastDays: predictionMeta?.forecastDays ?? 0,
-          accuracy: predictionMeta?.accuracy,
-        },
-      } as PredictionResponse : null;
+      const fullPredictionData = preparePredictionPayload();
 
       const { response, action } = await geminiService.chat(
         userMessage,
@@ -237,48 +290,8 @@ export function SmartPrediction() {
         { role: 'assistant', content: safeResponse },
       ]);
 
-      // Validate action before showing confirmation
-      if (action && action.type && action.type !== 'none' && action.needsConfirmation) {
-        // For bulk_restock, check if there are products to restock
-        if (action.type === 'bulk_restock') {
-          const productsNeedingRestock = safeRecommendations.filter(r => (r.recommendedRestock || 0) > 0);
-          if (productsNeedingRestock.length === 0) {
-            setChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: 'Tidak ada produk yang membutuhkan restock saat ini. Semua stok sudah mencukupi.' },
-            ]);
-            return;
-          }
-        }
-        
-        // For single restock, validate product exists and quantity is valid
-        if (action.type === 'restock') {
-          if (!action.productId || !action.productName) {
-            setChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: 'Produk tidak ditemukan dalam rekomendasi. Silakan cek nama produk.' },
-            ]);
-            return;
-          }
-          if (action.quantity == null || action.quantity <= 0) {
-            setChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: 'Jumlah restock harus lebih dari 0.' },
-            ]);
-            return;
-          }
-        }
-        
-        // Safely set pending action with validated data
-        const safeAction: CommandAction = {
-          type: action.type,
-          productId: action.productId ?? null,
-          productName: action.productName ?? null,
-          quantity: action.quantity ?? null,
-          needsConfirmation: action.needsConfirmation,
-        };
-        
-        setPendingAction(safeAction);
+      if (action) {
+        validateAndSetPendingAction(action);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -405,130 +418,126 @@ export function SmartPrediction() {
     ]);
   };
 
+  /**
+   * Area 2 Refactor: Execute a single restock action.
+   */
+  const executeRestockAction = async (action: CommandAction) => {
+    if (action.productId && action.quantity != null && action.quantity > 0) {
+      const success = await handleRestock(action.productId, action.quantity, true);
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: success 
+            ? `Berhasil restock ${action.quantity} unit untuk ${action.productName || 'produk'}.`
+            : `Gagal restock ${action.productName || 'produk'}. Silakan coba lagi.`,
+        },
+      ]);
+    } else {
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'Gagal restock: Informasi produk tidak lengkap.',
+        },
+      ]);
+    }
+  };
+
+  /**
+   * Area 2 Refactor: Execute a bulk restock action for all recommended products.
+   */
+  const executeBulkRestockAction = async () => {
+    const productsToRestock = (restockRecommendations || []).filter(r => 
+      r && (r.recommendedRestock || 0) > 0
+    );
+    
+    if (productsToRestock.length === 0) {
+      setChatMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Tidak ada produk yang membutuhkan restock saat ini.' },
+      ]);
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+    const results: string[] = [];
+
+    for (const product of productsToRestock) {
+      try {
+        if (product.productId && product.recommendedRestock > 0) {
+          const success = await handleRestock(product.productId, product.recommendedRestock, true);
+          if (success) {
+            successCount++;
+            results.push(`${product.productName}: +${product.recommendedRestock} unit`);
+          } else {
+            failCount++;
+          }
+        }
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to restock ${product.productName}:`, err);
+      }
+    }
+
+    const summaryMessage = successCount > 0
+      ? `Berhasil restock ${successCount} produk:\n${results.join('\n')}${failCount > 0 ? `\n\n${failCount} produk gagal di-restock.` : ''}`
+      : 'Gagal melakukan restock. Silakan coba lagi.';
+    
+    setChatMessages(prev => [...prev, { role: 'assistant', content: summaryMessage }]);
+  };
+
+  /**
+   * Area 2 Refactor: Execute an update stock action for a specific product.
+   */
+  const executeUpdateStockAction = async (action: CommandAction) => {
+    if (action.productName && action.quantity != null) {
+      const product = (restockRecommendations || []).find(r => 
+        r?.productName?.toLowerCase()?.includes((action.productName || '').toLowerCase())
+      );
+      if (product) {
+        await apiService.updateStock(product.productId, action.quantity);
+        setChatMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Stok berhasil diperbarui menjadi ${action.quantity} unit untuk ${product.productName}.`,
+          },
+        ]);
+      } else {
+        setChatMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Produk "${action.productName}" tidak ditemukan dalam rekomendasi.`,
+          },
+        ]);
+      }
+    }
+  };
+
   const handleConfirmAction = async () => {
     if (!pendingAction || isConfirmLoading) return;
-
     setIsConfirmLoading(true);
 
     try {
       switch (pendingAction.type) {
         case 'restock':
-          if (pendingAction.productId && pendingAction.quantity != null && pendingAction.quantity > 0) {
-            const success = await handleRestock(pendingAction.productId, pendingAction.quantity, true);
-            setChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: success 
-                  ? `Berhasil restock ${pendingAction.quantity} unit untuk ${pendingAction.productName || 'produk'}.`
-                  : `Gagal restock ${pendingAction.productName || 'produk'}. Silakan coba lagi.`,
-              },
-            ]);
-          } else {
-            setChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: 'Gagal restock: Informasi produk tidak lengkap.',
-              },
-            ]);
-          }
+          await executeRestockAction(pendingAction);
           break;
-        
         case 'bulk_restock':
-          const productsToRestock = (restockRecommendations || []).filter(r => 
-            r && (r.recommendedRestock || 0) > 0
-          );
-          
-          if (productsToRestock.length === 0) {
-            setChatMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: 'Tidak ada produk yang membutuhkan restock saat ini.',
-              },
-            ]);
-            break;
-          }
-
-          let successCount = 0;
-          let failCount = 0;
-          const results: string[] = [];
-
-          for (const product of productsToRestock) {
-            try {
-              if (product.productId && product.recommendedRestock > 0) {
-                const success = await handleRestock(product.productId, product.recommendedRestock, true);
-                if (success) {
-                  successCount++;
-                  results.push(`${product.productName}: +${product.recommendedRestock} unit`);
-                } else {
-                  failCount++;
-                }
-              }
-            } catch (err) {
-              failCount++;
-              console.error(`Failed to restock ${product.productName}:`, err);
-            }
-          }
-
-          const summaryMessage = successCount > 0
-            ? `Berhasil restock ${successCount} produk:\n${results.join('\n')}${failCount > 0 ? `\n\n${failCount} produk gagal di-restock.` : ''}`
-            : 'Gagal melakukan restock. Silakan coba lagi.';
-          
-          setChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: summaryMessage,
-            },
-          ]);
+          await executeBulkRestockAction();
           break;
-
         case 'update_stock':
-          if (pendingAction.productName && pendingAction.quantity != null) {
-            const product = (restockRecommendations || []).find(r => 
-              r?.productName?.toLowerCase()?.includes((pendingAction.productName || '').toLowerCase())
-            );
-            if (product) {
-              await apiService.updateStock(product.productId, pendingAction.quantity);
-              setChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: `Stok berhasil diperbarui menjadi ${pendingAction.quantity} unit untuk ${product.productName}.`,
-                },
-              ]);
-            } else {
-              setChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: `Produk "${pendingAction.productName}" tidak ditemukan dalam rekomendasi.`,
-                },
-              ]);
-            }
-          }
+          await executeUpdateStockAction(pendingAction);
           break;
-
         default:
-          setChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: 'Aksi tidak dikenali.',
-            },
-          ]);
+          setChatMessages(prev => [...prev, { role: 'assistant', content: 'Aksi tidak dikenali.' }]);
       }
     } catch (error) {
       console.error('Action error:', error);
-      setChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Gagal menjalankan aksi. Silakan coba lagi.',
-        },
-      ]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Gagal menjalankan aksi. Silakan coba lagi.' }]);
     } finally {
       setIsConfirmLoading(false);
       setPendingAction(null);
@@ -761,7 +770,7 @@ export function SmartPrediction() {
             <p className="text-xs text-slate-400 mt-2">
               {dataFreshnessWarning 
                 ? `Transaksi terakhir: ${accuracyDetails?.data_freshness?.days_since_last_transaction || '?'} hari lalu`
-                : accuracyDetails?.validation_mape !== null 
+                : accuracyDetails?.validation_mape != null
                   ? `Val MAPE: ${accuracyDetails.validation_mape}%` 
                   : 'Performa model'}
             </p>

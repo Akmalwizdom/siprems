@@ -167,9 +167,8 @@ export function UserManagement() {
             Kelola pengguna dan hak akses mereka
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-slate-400" />
-          <span className="text-sm text-slate-600">{total} pengguna</span>
+        <div className="flex items-center">
+          <span className="text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-full">Total: {total} Pengguna</span>
         </div>
       </div>
 
@@ -254,9 +253,9 @@ export function UserManagement() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteClick(user)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 h-8 text-xs font-medium border border-transparent hover:border-red-200"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      Hapus
                     </Button>
                   </td>
                 </tr>

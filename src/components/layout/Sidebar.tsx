@@ -181,7 +181,7 @@ export function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMo
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3" style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '16px', overflowY: 'auto' }}>
+        <nav className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pt-4">
           {navItems
             .filter(item => !item.allowedRoles || item.allowedRoles.includes(role))
             .map((item) => {

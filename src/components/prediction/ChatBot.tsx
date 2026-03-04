@@ -84,10 +84,12 @@ export function ChatBot({ predictionData = null, onRestockSuccess }: ChatBotProp
     setIsLoading(true);
 
     try {
+      const token = await getAuthToken();
       const response = await geminiService.chat(
         userMessage.content,
         predictionData,
-        [...messages, userMessage]
+        [...messages, userMessage],
+        token || undefined
       );
 
       const assistantMessage: ChatMessage = {

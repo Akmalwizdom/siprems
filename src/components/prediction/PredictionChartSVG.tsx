@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  TrendingUp, 
   AlertCircle, 
   Activity
 } from 'lucide-react';
-import { PredictionData } from '../types';
+import { PredictionData } from '../../types';
 
 // Constants for layout
 const SVG_WIDTH = 1000;

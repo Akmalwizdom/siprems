@@ -6,6 +6,7 @@ import { useToast } from '../components/ui/toast';
 import { AuthError } from 'firebase/auth';
 import { AdminOnly } from '../components/auth/RoleGuard';
 import { API_BASE_URL } from '../config';
+import { openApiClient } from '../services/openapi-client';
 
 interface StoreProfile {
   name: string;
@@ -91,34 +92,31 @@ export function Settings() {
     fetchStoreProfile();
   }, []);
 
-  // Load ML model status
-  useEffect(() => {
-    const fetchModelStatus = async () => {
-      setModelLoading(true);
-      try {
-        const token = await getAuthToken();
-        const response = await fetch(`${API_BASE_URL}/forecast/model/store_1/status`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  // Load ML model status - extracted so it can be called after retrain too
+  const fetchModelStatus = async () => {
+    setModelLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      const result = await openApiClient.getModelStatus('store_1', token);
+      if (result.status === 'success' && result.model) {
+        setModelStatus({
+          exists: !!result.model.exists,
+          accuracy: typeof result.model.accuracy === 'number' ? result.model.accuracy : null,
+          lastTrained: typeof result.model.last_trained === 'string' ? result.model.last_trained : null,
+          dataPoints: typeof result.model.data_points === 'number' ? result.model.data_points : null,
         });
-        if (response.ok) {
-          const result = await response.json();
-          if (result.status === 'success' && result.model) {
-            setModelStatus({
-              exists: result.model.exists || false,
-              accuracy: result.model.accuracy || null,
-              lastTrained: result.model.last_trained || null,
-              dataPoints: result.model.data_points || null,
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching model status:', error);
-      } finally {
-        setModelLoading(false);
       }
-    };
-    fetchModelStatus();
-  }, [getAuthToken]);
+    } catch (error) {
+      console.error('Error fetching model status:', error);
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchModelStatus(); }, [getAuthToken]);
 
   // Handle model retrain
   const handleRetrainModel = async () => {
@@ -145,15 +143,15 @@ export function Settings() {
         throw new Error(result.error || 'Training failed');
       }
 
-      showToast('Model berhasil dilatih ulang!', 'success');
-      
-      // Refresh model status
-      setModelStatus({
-        exists: true,
-        accuracy: result.metadata?.accuracy || null,
-        lastTrained: new Date().toISOString(),
-        dataPoints: result.metadata?.data_points || null,
-      });
+      // Training is async (202 Accepted) - poll until accuracy is available
+      showToast('Model sedang dilatih ulang, mohon tunggu...', 'success');
+
+      const pollStatus = async (attempt: number = 1): Promise<void> => {
+        try { await fetchModelStatus(); } catch (_) { /* ignore */ }
+        if (attempt < 10) setTimeout(() => pollStatus(attempt + 1), 10000);
+        else showToast('Training selesai! Akurasi model telah diperbarui.', 'success');
+      };
+      setTimeout(() => pollStatus(), 15000);
     } catch (error: any) {
       console.error('Error retraining model:', error);
       showToast(error.message || 'Gagal melatih ulang model', 'error');

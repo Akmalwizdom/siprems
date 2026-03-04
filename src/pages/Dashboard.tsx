@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { TrendingUp, ShoppingBag, Package, Loader2, Trophy } from 'lucide-react';
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { TimeRange, DashboardMetrics, CategorySales } from '../types';
+import { TimeRange, DashboardMetrics, CategorySales, Product } from '../types';
 import { formatIDR } from '../utils/currency';
 import { Button } from '../components/ui/button';
 import { useRole } from '../context/AuthContext';
@@ -60,7 +60,7 @@ export function Dashboard() {
   const metricsData = metrics.data as DashboardMetrics | undefined;
   const salesData = salesChart.data || [];
   const categorySalesData: CategorySales[] = categorySales.data || [];
-  const allProducts = products.data || [];
+  const allProducts: Product[] = products.data || [];
   
   // Top products from today's summary
   const topProducts: TopProduct[] = useMemo(() => {
@@ -404,15 +404,15 @@ export function Dashboard() {
             {(() => {
               const DEFAULT_REORDER_POINT = 100;
               const totalProducts = allProducts.length || 1;
-              const criticalProducts = allProducts.filter(p => 
+              const criticalProducts = allProducts.filter((p: Product) => 
                 p.stock < (p.reorder_point || DEFAULT_REORDER_POINT) * 0.5 || p.stock < 10
               );
-              const lowProducts = allProducts.filter(p => 
+              const lowProducts = allProducts.filter((p: Product) => 
                 p.stock < (p.reorder_point || DEFAULT_REORDER_POINT) && 
                 p.stock >= (p.reorder_point || DEFAULT_REORDER_POINT) * 0.5 &&
                 p.stock >= 10
               );
-              const healthyProducts = allProducts.filter(p => 
+              const healthyProducts = allProducts.filter((p: Product) => 
                 p.stock >= (p.reorder_point || DEFAULT_REORDER_POINT)
               );
               const healthyPercent = Math.round((healthyProducts.length / totalProducts) * 100);
