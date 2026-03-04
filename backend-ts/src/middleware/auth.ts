@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../services/database';
+import { verifyFirebaseIdToken } from '../services/firebase-auth';
 
 export type UserRole = 'user' | 'admin';
 
@@ -11,9 +12,18 @@ export interface AuthenticatedRequest extends Request {
     };
 }
 
+function extractBearerToken(authHeader: string | undefined): string | null {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    return token.length > 0 ? token : null;
+}
+
 /**
- * Middleware to authenticate user by Firebase ID token
- * and fetch user role from Supabase
+ * Middleware to authenticate user by Firebase ID token and
+ * fetch user role from Supabase.
  */
 export async function authenticate(
     req: AuthenticatedRequest,
@@ -21,29 +31,15 @@ export async function authenticate(
     next: NextFunction
 ) {
     try {
-        const authHeader = req.headers.authorization;
-
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const token = extractBearerToken(req.headers.authorization);
+        if (!token) {
             return res.status(401).json({ error: 'Unauthorized: No token provided' });
         }
 
-        const token = authHeader.split('Bearer ')[1];
-
-        // Decode Firebase ID token (we'll verify on frontend, backend trusts the UID)
-        // In production, you should verify the token with Firebase Admin SDK
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-            return res.status(401).json({ error: 'Unauthorized: Invalid token format' });
-        }
-
         try {
-            const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-            const userId = payload.user_id || payload.sub;
-            const email = payload.email;
-
-            if (!userId) {
-                return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-            }
+            const verifiedUser = await verifyFirebaseIdToken(token);
+            const userId = verifiedUser.uid;
+            const email = verifiedUser.email || `${userId}@firebase.local`;
 
             // Fetch user role from Supabase
             const { data: userData, error } = await supabase
@@ -53,20 +49,12 @@ export async function authenticate(
                 .single();
 
             if (error || !userData) {
-                // User not found in our database, create with appropriate role
-                // Firebase JWT contains 'name' and 'picture' for Google accounts
-                const displayName = payload.name || null;
-                const avatarUrl = payload.picture || null;
+                const displayName = verifiedUser.name || null;
+                const avatarUrl = verifiedUser.picture || null;
 
-                // Check if this is the first user (database is empty)
-                // First user automatically becomes admin (for UMKM owner)
-                const { count: userCount, error: countError } = await supabase
-                    .from('users')
-                    .select('*', { count: 'exact', head: true });
-
-                // For demo purposes: all new users get admin role
-                // In production, change 'admin' back to: isFirstUser ? 'admin' : 'user'
-                const assignedRole: UserRole = 'admin';
+                // Default role for new users (Phase 2 security hardening).
+                // Admins must be promoted explicitly via user management.
+                const assignedRole: UserRole = 'user';
 
                 console.log(`[Auth] Creating new user: ${email}, role: ${assignedRole}`);
 
@@ -74,8 +62,8 @@ export async function authenticate(
                     .from('users')
                     .insert({
                         firebase_uid: userId,
-                        email: email,
-                        role: assignedRole, // Demo: all users get admin access
+                        email,
+                        role: assignedRole,
                         display_name: displayName,
                         avatar_url: avatarUrl,
                     })
@@ -101,8 +89,9 @@ export async function authenticate(
             }
 
             next();
-        } catch (decodeError) {
-            return res.status(401).json({ error: 'Unauthorized: Failed to decode token' });
+        } catch (verifyError) {
+            console.error('[Auth] Token verification failed:', verifyError);
+            return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
         }
     } catch (error) {
         console.error('Authentication error:', error);
@@ -144,9 +133,8 @@ export async function optionalAuth(
     res: Response,
     next: NextFunction
 ) {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractBearerToken(req.headers.authorization);
+    if (!token) {
         return next(); // Continue without auth
     }
 

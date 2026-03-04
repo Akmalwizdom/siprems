@@ -1,20 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from './config';
-
-const app = express();
-
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Increased for base64 image uploads
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', service: 'siprems-backend-ts' });
-});
-
-// API routes
+import { requestIdMiddleware } from './middleware/request-id';
+import { logger } from './utils/logger';
 import transactionsRouter from './routes/transactions';
 import productsRouter from './routes/products';
 import eventsRouter from './routes/events';
@@ -25,34 +13,111 @@ import chatRouter from './routes/chat';
 import usersRouter from './routes/users';
 import settingsRouter from './routes/settings';
 import categoriesRouter from './routes/categories';
+import { globalLimiter } from './middleware/rate-limit';
+import { register, httpRequestDurationMicroseconds, httpRequestCount } from './utils/metrics';
 
-app.use('/api/transactions', transactionsRouter);
-app.use('/api/products', productsRouter);
-app.use('/api/events', eventsRouter);
-app.use('/api/calendar/events', eventsRouter); // Alias for Python backend compatibility
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/holidays', holidaysRouter);
-app.use('/api/forecast', forecastRouter);
-app.use('/api/predict', forecastRouter); // Alias for frontend compatibility
-app.use('/api/model', forecastRouter); // Alias for model endpoints
-app.use('/api/chat', chatRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/settings', settingsRouter);
-app.use('/api/categories', categoriesRouter);
+const app = express();
+
+const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+        if (!origin) {
+            return callback(null, true);
+        }
+
+        if (config.security.corsOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+};
+
+// Middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(express.json({ limit: '10mb' })); // Increased for base64 image uploads
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(requestIdMiddleware); // Structured logging + request tracing
+
+// Metrics Middleware
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api')) {
+        return next();
+    }
+    const end = httpRequestDurationMicroseconds.startTimer();
+    res.on('finish', () => {
+        const route = req.route ? req.route.path : req.path;
+        httpRequestCount.inc({
+            method: req.method,
+            route: route,
+            status_code: res.statusCode
+        });
+        end({
+            method: req.method,
+            route: route,
+            status_code: res.statusCode
+        });
+    });
+    next();
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+    try {
+        res.set('Content-Type', register.contentType);
+        res.end(await register.metrics());
+    } catch (ex) {
+        res.status(500).end(String(ex));
+    }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'siprems-backend-ts' });
+});
+
+function mountCoreRoutes(basePath: string) {
+    app.use(`${basePath}/transactions`, transactionsRouter);
+    app.use(`${basePath}/products`, productsRouter);
+    app.use(`${basePath}/events`, eventsRouter);
+    app.use(`${basePath}/dashboard`, dashboardRouter);
+    app.use(`${basePath}/holidays`, holidaysRouter);
+    app.use(`${basePath}/forecast`, forecastRouter);
+    app.use(`${basePath}/chat`, chatRouter);
+    app.use(`${basePath}/users`, usersRouter);
+    app.use(`${basePath}/settings`, settingsRouter);
+    app.use(`${basePath}/categories`, categoriesRouter);
+}
+
+// Canonical routes (Phase 2 contract-first)
+app.use('/api/v1', globalLimiter);
+mountCoreRoutes('/api/v1');
+
+// Backward compatibility routes (max 1 release cycle)
+mountCoreRoutes('/api');
+app.use('/api/calendar/events', eventsRouter); // Python backend compatibility
+app.use('/api/predict', forecastRouter); // Legacy frontend compatibility
+app.use('/api/model', forecastRouter); // Legacy model endpoints
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Error:', err);
+    logger.error('Unhandled error', {
+        requestId: req.requestId,
+        errorClass: err.name || 'Error',
+        method: req.method,
+        path: req.originalUrl,
+    });
     res.status(err.status || 500).json({
-        error: err.message || 'Internal Server Error',
+        status: 'error',
+        error: { code: 'INTERNAL_ERROR', message: err.message || 'Internal Server Error' },
     });
 });
 
 // Start server
 const PORT = config.port;
 app.listen(PORT, () => {
-    console.log(`✅ Backend TS running on http://localhost:${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    logger.info('Server started', { port: PORT } as any);
+    logger.info(`Health check available at /health`);
 });
 
 export default app;
