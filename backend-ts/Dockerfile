@@ -1,23 +1,34 @@
-FROM node:20-alpine
+FROM node:20-alpine AS deps
 
 WORKDIR /app
+# Increase npm robustness for unstable networks
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000
 
-# Copy package files from backend-ts (context is repo root)
-COPY backend-ts/package*.json ./
-COPY backend-ts/tsconfig.json ./
+COPY package*.json ./
+RUN npm ci || (sleep 5 && npm ci)
 
-# Install dependencies
-RUN npm install
+FROM deps AS build
 
-# Copy source code from backend-ts
-COPY backend-ts/src ./src
-
-# Build TypeScript
+COPY tsconfig.json ./
+COPY src ./src
 RUN npm run build
 
-# Expose port
-EXPOSE 8000
+FROM node:20-alpine AS runtime
 
-# Start the application
-CMD ["npm", "start"]
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN (npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm ci --omit=dev --ignore-scripts) || \
+    (sleep 5 && npm ci --omit=dev --ignore-scripts)
+
+COPY --from=build /app/dist ./dist
+
+EXPOSE 8000
+CMD ["node", "dist/index.js"]
 

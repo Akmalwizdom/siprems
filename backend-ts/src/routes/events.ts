@@ -2,25 +2,43 @@ import { Router, Request, Response } from 'express';
 import { db } from '../services/database';
 import { geminiService } from '../services/gemini';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createEventSchema } from '../schemas';
+import { sendSuccess, sendError } from '../utils/response';
 
 const router = Router();
 
-// Get all events - Return array directly for frontend compatibility
-// Public access for viewing calendar
-router.get('/', async (req: Request, res: Response) => {
+// Get all events - Public access for viewing calendar
+router.get('/', async (_req: Request, res: Response) => {
     try {
         const events = await db.events.getAll();
-
-        // Return array directly (not nested in object) to match Python backend
+        // Return array directly for frontend compatibility
         res.json(events || []);
     } catch (error: any) {
         console.error('[Events] Get all failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'EVENTS_FETCH_ERROR', error.message);
     }
 });
+
+async function createEvent(req: AuthenticatedRequest, res: Response) {
+    try {
+        const payload = req.body;
+
+        const event = await db.events.create({
+            date: payload.date,
+            title: payload.title,
+            type: payload.type,
+            description: payload.description || null,
+            impact_weight: payload.impact_weight ?? 1.0,
+        });
+
+        sendSuccess(res, event);
+    } catch (error: any) {
+        console.error('[Events] Create failed:', error);
+        const message = error?.message || 'Failed to create event';
+        sendError(res, 'EVENT_CREATE_ERROR', message, 500);
+    }
+}
 
 // Get AI suggestion for event classification (Admin only)
 router.post('/suggest', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -28,82 +46,68 @@ router.post('/suggest', authenticate, requireAdmin, async (req: AuthenticatedReq
         const { title, description, date } = req.body;
 
         if (!title) {
-            return res.status(400).json({
-                status: 'error',
-                error: 'Title is required'
-            });
+            return sendError(res, 'VALIDATION_ERROR', 'Title is required', 400);
         }
 
         const classification = await geminiService.classifyEvent(title, description, date);
 
-        res.json({
-            status: 'success',
-            suggestion: {
-                suggested_category: classification.category,
-                confidence: classification.confidence,
-                rationale: classification.rationale,
-            }
+        sendSuccess(res, {
+            suggested_category: classification.category,
+            confidence: classification.confidence,
+            rationale: classification.rationale,
         });
     } catch (error: any) {
         console.error('[Events] AI suggestion failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'EVENT_SUGGEST_ERROR', error.message);
     }
 });
 
-// Create event (Admin only)
-router.post('/confirm', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Create event (Admin only) - Canonical endpoint with Zod validation
+router.post('/', authenticate, requireAdmin, validate(createEventSchema), createEvent);
+
+// Backward compatibility for legacy frontend route
+router.post('/confirm', authenticate, requireAdmin, validate(createEventSchema), createEvent);
+
+// Update event (Admin only) with Zod validation
+router.put('/:id', authenticate, requireAdmin, validate(createEventSchema), async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const { date, title, type, description, impact_weight } = req.body;
-
-        // Validate event type
-        const validTypes = ['promotion', 'holiday', 'store-closed', 'event'];
-        if (!validTypes.includes(type)) {
-            return res.status(400).json({
-                status: 'error',
-                error: `Invalid event type. Must be one of: ${validTypes.join(', ')}`
-            });
-        }
-
-        // Only insert fields that exist in the database schema
-        const event = await db.events.create({
-            date,
-            title,
-            type,
-            description: description || null,
-            impact_weight: impact_weight || 1.0,
+        const payload = req.body;
+        const event = await db.events.update(req.params.id, {
+            date: payload.date,
+            title: payload.title,
+            type: payload.type,
+            description: payload.description || null,
+            impact_weight: payload.impact_weight ?? 1.0,
         });
 
-        res.json({
-            status: 'success',
-            event
-        });
+        sendSuccess(res, event);
     } catch (error: any) {
-        console.error('[Events] Create failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        console.error('[Events] Update failed:', error);
+        sendError(res, 'EVENT_UPDATE_ERROR', error?.message || 'Failed to update event');
     }
+});
+
+// Calibration history (placeholder)
+router.get('/:id/history', authenticate, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+    sendSuccess(res, { history: [] });
+});
+
+// Optional calibrate endpoint from roadmap contract
+router.post('/:id/calibrate', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    sendSuccess(res, {
+        message: 'Calibration endpoint is available but calibration logic is not implemented yet.',
+        calibration: { event_id: req.params.id, new_impact: null },
+    });
 });
 
 // Delete event (Admin only)
 router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
     try {
         await db.events.delete(req.params.id);
-
-        res.json({
-            status: 'success',
-            message: 'Event deleted'
-        });
+        sendSuccess(res, { message: 'Event deleted' });
     } catch (error: any) {
         console.error('[Events] Delete failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'EVENT_DELETE_ERROR', error.message);
     }
 });
 

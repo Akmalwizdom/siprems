@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { db, supabase } from '../services/database';
 import { authenticate, requireAdmin, optionalAuth, AuthenticatedRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createProductSchema, updateProductSchema } from '../schemas';
+import { sendSuccess, sendError } from '../utils/response';
 
 const router = Router();
 
@@ -49,10 +52,7 @@ router.get('/', async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error('[Products] Get all failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'PRODUCTS_FETCH_ERROR', error.message);
     }
 });
 
@@ -74,10 +74,7 @@ router.get('/categories', async (req: Request, res: Response) => {
         res.json({ categories });
     } catch (error: any) {
         console.error('[Products] Get categories failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'CATEGORIES_FETCH_ERROR', error.message);
     }
 });
 
@@ -87,61 +84,39 @@ router.get('/:id', async (req: Request, res: Response) => {
         const product = await db.products.getById(req.params.id);
 
         if (!product) {
-            return res.status(404).json({
-                status: 'error',
-                error: 'Product not found'
-            });
+            return sendError(res, 'PRODUCT_NOT_FOUND', 'Product not found', 404);
         }
 
-        res.json({
-            status: 'success',
-            product
-        });
+        sendSuccess(res, { product });
     } catch (error: any) {
         console.error('[Products] Get by ID failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'PRODUCT_FETCH_ERROR', error.message);
     }
 });
 
-// Update product stock (Admin only)
-router.patch('/:id', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Update product stock (Admin only) with Zod validation
+router.patch('/:id', authenticate, requireAdmin, validate(updateProductSchema), async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const { stock, price } = req.body;
+        const { stock, price, ...rest } = req.body;
 
-        const updates: any = {};
+        const updates: any = { ...rest };
         if (stock !== undefined) updates.stock = stock;
         // Map frontend 'price' to database 'selling_price' column
         if (price !== undefined) updates.selling_price = price;
 
         const product = await db.products.update(req.params.id, updates);
 
-        res.json({
-            status: 'success',
-            product
-        });
+        sendSuccess(res, { product });
     } catch (error: any) {
         console.error('[Products] Update failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'PRODUCT_UPDATE_ERROR', error.message);
     }
 });
 
-// Create product (Admin only)
-router.post('/', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Create product (Admin only) with Zod validation
+router.post('/', authenticate, requireAdmin, validate(createProductSchema), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { name, category, sku, stock, selling_price, cost_price, image_url, description } = req.body;
-
-        if (!name || selling_price === undefined) {
-            return res.status(400).json({
-                status: 'error',
-                error: 'Name and selling_price are required'
-            });
-        }
 
         const { data, error } = await supabase
             .from('products')
@@ -160,16 +135,10 @@ router.post('/', authenticate, requireAdmin, async (req: AuthenticatedRequest, r
 
         if (error) throw error;
 
-        res.json({
-            status: 'success',
-            product: data
-        });
+        sendSuccess(res, { product: data });
     } catch (error: any) {
         console.error('[Products] Create failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'PRODUCT_CREATE_ERROR', error.message);
     }
 });
 
@@ -185,16 +154,10 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
 
         if (error) throw error;
 
-        res.json({
-            status: 'success',
-            message: 'Product deleted successfully'
-        });
+        sendSuccess(res, { message: 'Product deleted successfully' });
     } catch (error: any) {
         console.error('[Products] Delete failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'PRODUCT_DELETE_ERROR', error.message);
     }
 });
 
@@ -205,19 +168,13 @@ router.post('/:id/image', authenticate, requireAdmin, async (req: AuthenticatedR
         const { image } = req.body; // Base64 encoded image
 
         if (!image) {
-            return res.status(400).json({
-                status: 'error',
-                error: 'Image data is required'
-            });
+            return sendError(res, 'VALIDATION_ERROR', 'Image data is required', 400);
         }
 
         // Extract base64 data and content type
         const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (!matches || matches.length !== 3) {
-            return res.status(400).json({
-                status: 'error',
-                error: 'Invalid image format. Expected base64 data URL.'
-            });
+            return sendError(res, 'VALIDATION_ERROR', 'Invalid image format. Expected base64 data URL.', 400);
         }
 
         const contentType = matches[1];
@@ -259,17 +216,10 @@ router.post('/:id/image', authenticate, requireAdmin, async (req: AuthenticatedR
 
         if (updateError) throw updateError;
 
-        res.json({
-            status: 'success',
-            image_url: imageUrl,
-            product
-        });
+        sendSuccess(res, { image_url: imageUrl, product });
     } catch (error: any) {
         console.error('[Products] Image upload failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
+        sendError(res, 'IMAGE_UPLOAD_ERROR', error.message);
     }
 });
 

@@ -1,11 +1,36 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../services/database';
+import { sendError } from '../utils/response';
+import { LRUCache } from 'lru-cache';
 
 const router = Router();
 
+// Configure cache for dashboard endpoints (5 minute TTL)
+const dashboardCache = new LRUCache<string, any>({
+    max: 100,
+    ttl: 1000 * 60 * 5,
+});
+
+// Helper to execute with cache
+const executeWithCache = async (req: Request, res: Response, fetchFn: () => Promise<any>) => {
+    const cacheKey = req.originalUrl;
+    if (dashboardCache.has(cacheKey)) {
+        return res.json(dashboardCache.get(cacheKey));
+    }
+    
+    try {
+        const data = await fetchFn();
+        dashboardCache.set(cacheKey, data);
+        res.json(data);
+    } catch (error: any) {
+        console.error(`[Dashboard] ${req.path} failed:`, error);
+        sendError(res, 'DASHBOARD_API_ERROR', error.message);
+    }
+};
+
 // Get dashboard metrics (matches Python backend /api/dashboard/metrics)
 router.get('/metrics', async (req: Request, res: Response) => {
-    try {
+    executeWithCache(req, res, async () => {
         const range = req.query.range as string || 'month';
         const today = new Date();
         let currentStart: string;
@@ -16,29 +41,25 @@ router.get('/metrics', async (req: Request, res: Response) => {
         // Calculate date ranges based on selected period
         switch (range) {
             case 'today':
-                // Today - use full timestamp range for proper comparison
-                // Get start of today (00:00:00) and end of today (23:59:59) in local timezone adjusted
                 const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                 const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-                currentStart = todayStart.toISOString();
-                currentEnd = todayEnd.toISOString();
-                // Yesterday
+                currentStart = todayStart.toISOString().split('T')[0];
+                currentEnd = todayEnd.toISOString().split('T')[0];
+                
                 const yesterday = new Date(today);
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-                const yesterdayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
-                previousStart = yesterdayStart.toISOString();
-                previousEnd = yesterdayEnd.toISOString();
+                previousStart = yesterdayStart.toISOString().split('T')[0];
+                previousEnd = previousStart;
                 break;
             case 'week':
-                // This week (Monday to today)
                 const dayOfWeek = today.getDay();
                 const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 const thisMonday = new Date(today);
                 thisMonday.setDate(today.getDate() - mondayOffset);
                 currentStart = thisMonday.toISOString().split('T')[0];
                 currentEnd = today.toISOString().split('T')[0];
-                // Last week
+                
                 const lastWeekMonday = new Date(thisMonday);
                 lastWeekMonday.setDate(thisMonday.getDate() - 7);
                 const lastWeekSunday = new Date(thisMonday);
@@ -47,112 +68,67 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 previousEnd = lastWeekSunday.toISOString().split('T')[0];
                 break;
             case 'year':
-                // This year
                 currentStart = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
                 currentEnd = today.toISOString().split('T')[0];
-                // Last year
+                
                 previousStart = new Date(today.getFullYear() - 1, 0, 1).toISOString().split('T')[0];
                 previousEnd = new Date(today.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
                 break;
             case 'month':
             default:
-                // This month
                 currentStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                 currentEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-                // Last month
+                
                 previousStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
                 previousEnd = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
                 break;
         }
 
-
-
-        // Fetch current period data using pagination to bypass 1000 row limit
-        let currentRevenue = 0;
-        let currentTransactions = 0;
-        let currentItems = 0;
-
-        let allCurrentTx: any[] = [];
-        let page = 0;
-        const pageSize = 1000;
-        while (true) {
-            const { data: batch, error } = await supabase
-                .from('transactions')
-                .select('total_amount, items_count')
-                .gte('date', currentStart)
-                .lte('date', currentEnd)
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+        // Helper function to get aggregated metrics from daily_sales_summary materialized view
+        const getMetricsForPeriod = async (start: string, end: string) => {
+            const { data, error } = await supabase
+                .from('daily_sales_summary')
+                .select('y, transactions_count, items_sold')
+                .gte('ds', start)
+                .lte('ds', end);
 
             if (error) throw error;
-            if (!batch || batch.length === 0) break;
-            allCurrentTx = [...allCurrentTx, ...batch];
-            if (batch.length < pageSize) break;
-            page++;
-        }
-        currentRevenue = allCurrentTx.reduce((sum, t) => sum + (t.total_amount || 0), 0);
-        currentTransactions = allCurrentTx.length;
-        currentItems = allCurrentTx.reduce((sum, t) => sum + (t.items_count || 0), 0);
 
+            return (data || []).reduce((acc, row) => ({
+                revenue: acc.revenue + (Number(row.y) || 0),
+                transactions: acc.transactions + (Number(row.transactions_count) || 0),
+                items: acc.items + (Number(row.items_sold) || 0)
+            }), { revenue: 0, transactions: 0, items: 0 });
+        };
 
-        // Get previous period metrics using same approach
-        let previousRevenue = 0;
-        let previousTransactions = 0;
-        let previousItems = 0;
-
-        let allPreviousTx: any[] = [];
-        let prevPage = 0;
-        // reuse pageSize from above
-        while (true) {
-            const { data: batch, error } = await supabase
-                .from('transactions')
-                .select('total_amount, items_count')
-                .gte('date', previousStart)
-                .lte('date', previousEnd)
-                .range(prevPage * pageSize, (prevPage + 1) * pageSize - 1);
-
-            if (error) throw error;
-            if (!batch || batch.length === 0) break;
-            allPreviousTx = [...allPreviousTx, ...batch];
-            if (batch.length < pageSize) break;
-            prevPage++;
-        }
-        previousRevenue = allPreviousTx.reduce((sum, t) => sum + (t.total_amount || 0), 0);
-        previousTransactions = allPreviousTx.length;
-        previousItems = allPreviousTx.reduce((sum, t) => sum + (t.items_count || 0), 0);
-
-
+        const currentMetrics = await getMetricsForPeriod(currentStart, currentEnd);
+        const previousMetrics = await getMetricsForPeriod(previousStart, previousEnd);
 
         // Calculate percentage changes
-        const revenueChange = previousRevenue > 0
-            ? ((currentRevenue - previousRevenue) / previousRevenue * 100)
+        const revenueChange = previousMetrics.revenue > 0
+            ? ((currentMetrics.revenue - previousMetrics.revenue) / previousMetrics.revenue * 100)
             : 0;
-        const transactionsChange = previousTransactions > 0
-            ? ((currentTransactions - previousTransactions) / previousTransactions * 100)
+        const transactionsChange = previousMetrics.transactions > 0
+            ? ((currentMetrics.transactions - previousMetrics.transactions) / previousMetrics.transactions * 100)
             : 0;
-        const itemsChange = previousItems > 0
-            ? ((currentItems - previousItems) / previousItems * 100)
+        const itemsChange = previousMetrics.items > 0
+            ? ((currentMetrics.items - previousMetrics.items) / previousMetrics.items * 100)
             : 0;
 
-        res.json({
-            totalRevenue: currentRevenue,
-            totalTransactions: currentTransactions,
-            totalItemsSold: currentItems,
+        return {
+            totalRevenue: currentMetrics.revenue,
+            totalTransactions: currentMetrics.transactions,
+            totalItemsSold: currentMetrics.items,
             revenueChange: Math.round(revenueChange * 10) / 10,
             transactionsChange: Math.round(transactionsChange * 10) / 10,
             itemsChange: Math.round(itemsChange * 10) / 10
-        });
-    } catch (error: any) {
-        console.error('[Dashboard] Get metrics failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
-    }
+        };
+    });
 });
 
 // Get sales trend (last 7 days)
 router.get('/sales-trend', async (req: Request, res: Response) => {
-    try {
+    executeWithCache(req, res, async () => {
         const { data, error } = await supabase
             .from('daily_sales_summary')
             .select('ds, y')
@@ -161,22 +137,16 @@ router.get('/sales-trend', async (req: Request, res: Response) => {
 
         if (error) throw error;
 
-        res.json({
+        return {
             status: 'success',
             trend: data?.reverse() || []
-        });
-    } catch (error: any) {
-        console.error('[Dashboard] Get sales trend failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
-    }
+        };
+    });
 });
 
 // Get sales chart data (last 90 days) - Required by Dashboard.tsx
 router.get('/sales-chart', async (req: Request, res: Response) => {
-    try {
+    executeWithCache(req, res, async () => {
         // Calculate date 90 days ago
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -197,19 +167,13 @@ router.get('/sales-chart', async (req: Request, res: Response) => {
             transactions_count: row.transactions_count || 0
         }));
 
-        res.json(formattedData);
-    } catch (error: any) {
-        console.error('[Dashboard] Get sales chart failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
-    }
+        return formattedData;
+    });
 });
 
 // Get category sales breakdown (last 90 days) - Required by Dashboard.tsx
 router.get('/category-sales', async (req: Request, res: Response) => {
-    try {
+    executeWithCache(req, res, async () => {
         // Category color mapping (Solid Indigo/Blue Theme)
         const CATEGORY_COLOR_MAP: Record<string, string> = {
             'Coffee': '#3457D5',      // Royal Azure
@@ -248,19 +212,13 @@ router.get('/category-sales', async (req: Request, res: Response) => {
             }))
             .sort((a, b) => b.value - a.value); // Sort by revenue descending
 
-        res.json(formattedData);
-    } catch (error: any) {
-        console.error('[Dashboard] Get category sales failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
-    }
+        return formattedData;
+    });
 });
 
 // Get today's summary - items sold, transactions, products sold
 router.get('/today', async (req: Request, res: Response) => {
-    try {
+    executeWithCache(req, res, async () => {
         const now = new Date();
         // Get start of today (00:00:00) and end of today (23:59:59)
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -319,21 +277,15 @@ router.get('/today', async (req: Request, res: Response) => {
             .map(([id, data]) => ({ id, ...data }))
             .sort((a, b) => b.quantity - a.quantity);
 
-        res.json({
+        return {
             date: todayStartISO.split('T')[0],
             totalTransactions,
             totalRevenue,
             totalItems,
             uniqueProducts: productsArray.length,
             products: productsArray
-        });
-    } catch (error: any) {
-        console.error('[Dashboard] Get today summary failed:', error);
-        res.status(500).json({
-            status: 'error',
-            error: error.message
-        });
-    }
+        };
+    });
 });
 
 export default router;
