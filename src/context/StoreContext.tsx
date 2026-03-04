@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { API_BASE_URL } from '../config';
+import { openApiClient } from '../services/openapi-client';
 
 export interface CalendarEvent {
   id: string;
@@ -34,9 +34,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/calendar/events`);
-      const data = await response.json();
-      const formattedEvents = data.map((e: any) => ({
+      const rawEvents = await openApiClient.listEvents();
+      const formattedEvents = rawEvents.map((e: any) => ({
         id: e.id ? String(e.id) : `temp_${Date.now()}_${Math.random()}`,
         title: e.title,
         date: e.date,

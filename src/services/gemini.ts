@@ -68,7 +68,8 @@ class GeminiService {
   async chat(
     message: string,
     predictionData: PredictionResponse | null,
-    chatHistory: ChatMessage[]
+    chatHistory: ChatMessage[],
+    token?: string
   ): Promise<{ response: string; action: CommandAction }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
@@ -80,11 +81,16 @@ class GeminiService {
         chatHistory
       };
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch(this.aiChatEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
       });

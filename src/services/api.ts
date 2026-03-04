@@ -74,12 +74,13 @@ class ApiService {
 
   async trainModel(storeId: string, storeConfig?: { CompetitionDistance: number }): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/train/${storeId}`, {
+      const response = await fetch(`${this.baseUrl}/forecast/train`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          store_id: storeId,
           store_config: storeConfig || { CompetitionDistance: 500 },
         }),
       });
@@ -111,7 +112,7 @@ class ApiService {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/predict/${storeId}`, {
+      const response = await fetch(`${this.baseUrl}/forecast/predict/${storeId}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -271,13 +272,18 @@ class ApiService {
     }
   }
 
-  async getForecastAccuracy(storeId: string = '1'): Promise<{ accuracy: number | null; model_version?: string; last_trained?: string }> {
+  async getForecastAccuracy(storeId: string = '1', token?: string): Promise<{ accuracy: number | null; model_version?: string; last_trained?: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/forecast/accuracy?store_id=${storeId}`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/forecast/model/${storeId}/accuracy`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {

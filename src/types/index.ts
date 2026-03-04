@@ -16,6 +16,7 @@ export interface Product {
   costPrice: number;
   sellingPrice: number;
   stock: number;
+  reorder_point?: number;
   image?: string;
   imageUrl?: string;
   description?: string;

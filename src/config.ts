@@ -4,7 +4,8 @@
  */
 
 // API Base URL - configurable via .env file
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// Phase 2 contract-first default uses /api/v1 namespace.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 // App Info
 export const APP_NAME = 'SIPREMS';
