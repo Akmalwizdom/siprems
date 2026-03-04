@@ -3,9 +3,10 @@ Minimal FastAPI ML Service for Prophet Model Training & Prediction
 Only contains ML-related endpoints, business logic moved to TypeScript backend
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import threading
 from typing import Optional, List, Dict, Any
 from datetime import date
 import os
@@ -46,6 +47,22 @@ engine = create_engine(DATABASE_URL)
 # Initialize trainer
 trainer = ModelTrainer(engine)
 
+@app.on_event("startup")
+def startup_event():
+    """Trigger background model check on startup so the server doesn't block"""
+    logger.info("Application startup: Triggering background model check...")
+    def _auto_train():
+        try:
+            logger.info("Running auto-train check on startup")
+            cat_trainer = get_category_trainer()
+            cat_trainer.train_all_categories(force_retrain=False)
+        except Exception as e:
+            logger.error(f"Startup auto-training failed: {e}", exc_info=True)
+
+    thread = threading.Thread(target=_auto_train)
+    thread.daemon = True
+    thread.start()
+
 
 # ===== REQUEST MODELS =====
 
@@ -75,48 +92,47 @@ def health_check():
     return {"status": "ok", "service": "ml-service"}
 
 
-@app.post("/ml/train")
-def train_model(req: TrainRequest):
+def _background_train(store_id: str, end_date_obj, force_retrain: bool):
+    try:
+        logger.info(f"Background training started for store {store_id}")
+        model, metadata = trainer.train_model(store_id, end_date=end_date_obj, force_retrain=force_retrain)
+        logger.info(f"Background training completed for store {store_id}: accuracy={metadata.get('accuracy')}%")
+    except Exception as e:
+        logger.error(f"Background training failed for store {store_id}: {e}", exc_info=True)
+
+@app.post("/ml/train", status_code=202)
+def train_model(req: TrainRequest, background_tasks: BackgroundTasks):
     """
-    Train Prophet model for a specific store
-    
-    Args:
-        store_id: Store identifier
-        end_date: Optional end date for training data (YYYY-MM-DD)
-        force_retrain: Force retraining even if model exists
-    
-    Returns:
-        Model metadata including accuracy, MAPE, etc.
+    Train Prophet model for a specific store asynchronously
     """
     try:
-        logger.info(f"Training model for store {req.store_id}")
-        
         # Parse end_date if provided
         end_date_obj = None
         if req.end_date:
+            from datetime import datetime
             try:
-                from datetime import datetime
                 end_date_obj = datetime.fromisoformat(req.end_date).date()
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
         
-        # Train model
-        model, metadata = trainer.train_model(
-            req.store_id,
-            end_date=end_date_obj,
-            force_retrain=req.force_retrain
+        # Add to background tasks
+        background_tasks.add_task(
+            _background_train, 
+            req.store_id, 
+            end_date_obj, 
+            req.force_retrain
         )
         
-        logger.info(f"Training completed: accuracy={metadata.get('accuracy')}%")
-        
         return {
-            "status": "success",
-            "metadata": metadata
+            "status": "accepted",
+            "message": f"Training queued for store {req.store_id}"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Training failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+        logger.error(f"Failed to queue training: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to queue training: {str(e)}")
 
 
 @app.post("/ml/predict")
@@ -246,46 +262,48 @@ class CategoryPredictRequest(BaseModel):
     category: Optional[str] = None  # If None, predict all categories
 
 
-@app.post("/ml/train/categories")
-def train_category_models(req: CategoryTrainRequest):
+def _background_train_categories(end_date_obj, force_retrain: bool):
+    try:
+        logger.info("Background category training started")
+        cat_trainer = get_category_trainer()
+        results = cat_trainer.train_all_categories(end_date=end_date_obj, force_retrain=force_retrain)
+        trained_count = results.get('categories_trained', 0)
+        logger.info(f"Background category training completed: {trained_count} trained")
+    except Exception as e:
+        logger.error(f"Background category training failed: {e}", exc_info=True)
+
+@app.post("/ml/train/categories", status_code=202)
+def train_category_models(req: CategoryTrainRequest, background_tasks: BackgroundTasks):
     """
-    Train Prophet models for all product categories.
-    
-    Each category gets its own model for more accurate predictions.
-    
-    Args:
-        force_retrain: Force retraining even if models exist
-        end_date: Optional end date for training data (YYYY-MM-DD)
-    
-    Returns:
-        Training results for each category including accuracy metrics
+    Train Prophet models for all product categories asynchronously.
     """
     try:
-        logger.info("Training category-level models...")
-        cat_trainer = get_category_trainer()
-        
         # Parse end_date if provided
         end_date_obj = None
         if req.end_date:
+            from datetime import datetime
             try:
-                from datetime import datetime
                 end_date_obj = datetime.fromisoformat(req.end_date).date()
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
         
-        # Train all categories
-        results = cat_trainer.train_all_categories(
-            end_date=end_date_obj,
-            force_retrain=req.force_retrain
+        # Add to background tasks
+        background_tasks.add_task(
+            _background_train_categories, 
+            end_date_obj, 
+            req.force_retrain
         )
         
-        logger.info(f"Category training completed: {results['categories_trained']}/{results['total_categories']} trained")
+        return {
+            "status": "accepted",
+            "message": "Category training queued"
+        }
         
-        return results
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Category training failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Category training failed: {str(e)}")
+        logger.error(f"Failed to queue category training: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to queue category training: {str(e)}")
 
 
 @app.post("/ml/predict/categories")

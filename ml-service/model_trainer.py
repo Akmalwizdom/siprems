@@ -623,7 +623,7 @@ class ModelTrainer:
         try:
             saved_at = datetime.fromisoformat(metadata.get("saved_at", ""))
             return (get_current_time_wib().replace(tzinfo=None) - saved_at.replace(tzinfo=None)).days
-        except:
+        except (ValueError, TypeError):
             return 999
     
     def should_retrain(self, store_id: str) -> Tuple[bool, str]:

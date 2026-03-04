@@ -1,6 +1,9 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -8,12 +11,12 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install (from ml-service folder since context is repo root)
-COPY ml-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Build context is ./ml-service
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy application code from ml-service folder
-COPY ml-service/ .
+# Copy application code
+COPY . .
 
 # Create models directory
 RUN mkdir -p /app/models
