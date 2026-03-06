@@ -1,142 +1,110 @@
-import { createClient } from '@supabase/supabase-js';
+import { Pool } from 'pg';
 import { config } from '../config';
 
-const dbApiKey = config.supabase.serviceRoleKey || config.supabase.anonKey;
-const hasServiceRoleKey = !!config.supabase.serviceRoleKey && config.supabase.serviceRoleKey.length > 0;
+// Konfigurasi Pool PostgreSQL lokal
+export const pool = new Pool({
+    connectionString: config.database.url,
+});
 
-if (!hasServiceRoleKey) {
-    console.warn('[Database] WARNING: SUPABASE_SERVICE_ROLE_KEY is not configured.');
-    console.warn('[Database] Backend will use anon key and remain affected by RLS policies.');
-    console.warn('[Database] For Phase 2 hardening, configure SUPABASE_SERVICE_ROLE_KEY.');
-}
-
-// Backend server client. Prefer service role key for trusted server-side access.
-export const supabase = createClient(
-    config.supabase.url,
-    dbApiKey
-);
-
-// Admin client for storage operations (same key strategy as supabase client)
-export const supabaseAdmin = createClient(
-    config.supabase.url,
-    dbApiKey
-);
-
-// Helper function for common database operations
+// Objek db utama untuk operasi database
 export const db = {
-    supabase, // Export for direct access in routes
+    pool,
+
+    // Raw query helper
+    async query(text: string, params?: any[]) {
+        return pool.query(text, params);
+    },
+
+    async querySingle(text: string, params?: any[]) {
+        const { rows } = await pool.query(text, params);
+        return rows[0] || null;
+    },
 
     transactions: {
         async getAll(limit = 100) {
-            const { data, error } = await supabase
-                .from('transactions')
-                .select('*')
-                .order('transaction_date', { ascending: false })
-                .limit(limit);
-
-            if (error) throw error;
-            return data;
+            const { rows } = await pool.query(
+                'SELECT * FROM transactions ORDER BY date DESC LIMIT $1',
+                [limit]
+            );
+            return rows;
         },
 
         async create(transaction: any) {
-            const { data, error } = await supabase
-                .from('transactions')
-                .insert(transaction)
-                .select()
-                .single();
-
-            if (error) throw error;
-            return data;
+            // Menggunakan RPC atomic yang sudah dibuat di init-db.sql
+            const { rows } = await pool.query(
+                'SELECT public.create_transaction_atomic($1, $2, $3, $4, $5, $6) as result',
+                [
+                    transaction.total_amount,
+                    transaction.payment_method || 'Cash',
+                    transaction.order_types || 'dine-in',
+                    transaction.items_count || 0,
+                    transaction.date || new Date(),
+                    JSON.stringify(transaction.items || [])
+                ]
+            );
+            return rows[0].result;
         },
     },
 
     products: {
         async getAll() {
-            const { data, error } = await supabase
-                .from('products')
-                .select('*')
-                .order('name');
-
-            if (error) throw error;
-            return data;
+            const { rows } = await pool.query('SELECT * FROM products ORDER BY name ASC');
+            return rows;
         },
 
-        async getById(id: string) {
-            const { data, error } = await supabase
-                .from('products')
-                .select('*')
-                .eq('id', id)
-                .single();
-
-            if (error) throw error;
-            return data;
+        async getById(id: string | number) {
+            return db.querySingle('SELECT * FROM products WHERE id = $1', [id]);
         },
 
-        async update(id: string, updates: any) {
-            const { data, error } = await supabase
-                .from('products')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
+        async update(id: string | number, updates: any) {
+            const keys = Object.keys(updates);
+            if (keys.length === 0) return this.getById(id);
 
-            if (error) throw error;
-            return data;
+            const setClause = keys.map((key, index) => `${key} = $${index + 2}`).join(', ');
+            const values = Object.values(updates);
+
+            const { rows } = await pool.query(
+                `UPDATE products SET ${setClause}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+                [id, ...values]
+            );
+            return rows[0];
         },
     },
 
     events: {
         async getAll() {
-            const { data, error } = await supabase
-                .from('calendar_events')
-                .select('*')
-                .order('date');
-
-            if (error) throw error;
-            return data;
+            const { rows } = await pool.query('SELECT * FROM calendar_events ORDER BY date ASC');
+            return rows;
         },
 
         async getById(id: string) {
-            const { data, error } = await supabase
-                .from('calendar_events')
-                .select('*')
-                .eq('id', id)
-                .single();
-
-            if (error) throw error;
-            return data;
+            return db.querySingle('SELECT * FROM calendar_events WHERE id = $1', [id]);
         },
 
         async create(event: any) {
-            const { data, error } = await supabase
-                .from('calendar_events')
-                .insert(event)
-                .select()
-                .single();
-
-            if (error) throw error;
-            return data;
+            const { rows } = await pool.query(
+                'INSERT INTO calendar_events (date, title, type, description, impact_weight) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+                [event.date, event.title, event.type || 'event', event.description, event.impact_weight || 1.0]
+            );
+            return rows[0];
         },
 
         async update(id: string, updates: any) {
-            const { data, error } = await supabase
-                .from('calendar_events')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
+            const keys = Object.keys(updates);
+            if (keys.length === 0) return this.getById(id);
 
-            if (error) throw error;
-            return data;
+            const setClause = keys.map((key, index) => `${key} = $${index + 2}`).join(', ');
+            const values = Object.values(updates);
+
+            const { rows } = await pool.query(
+                `UPDATE calendar_events SET ${setClause}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+                [id, ...values]
+            );
+            return rows[0];
         },
 
         async delete(id: string) {
-            const { error } = await supabase
-                .from('calendar_events')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await pool.query('DELETE FROM calendar_events WHERE id = $1', [id]);
         },
     },
 };

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../services/database';
+import { db } from '../services/database';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
@@ -7,16 +7,11 @@ const router = Router();
 // Get all categories - Public access
 router.get('/', async (req: Request, res: Response) => {
     try {
-        const { data, error } = await supabase
-            .from('categories')
-            .select('*')
-            .order('name');
-
-        if (error) throw error;
+        const { rows } = await db.query('SELECT * FROM categories ORDER BY name ASC');
 
         res.json({
             status: 'success',
-            categories: data || []
+            categories: rows || []
         });
     } catch (error: any) {
         console.error('[Categories] Get all failed:', error);
@@ -39,30 +34,22 @@ router.post('/', authenticate, requireAdmin, async (req: AuthenticatedRequest, r
             });
         }
 
-        const { data, error } = await supabase
-            .from('categories')
-            .insert({
-                name: name.trim(),
-                description: description?.trim() || null
-            })
-            .select()
-            .single();
-
-        if (error) {
-            if (error.code === '23505') {
-                return res.status(409).json({
-                    status: 'error',
-                    error: 'Category already exists'
-                });
-            }
-            throw error;
-        }
+        const { rows } = await db.query(
+            'INSERT INTO categories (name, description) VALUES ($1, $2) RETURNING *',
+            [name.trim(), description?.trim() || null]
+        );
 
         res.json({
             status: 'success',
-            category: data
+            category: rows[0]
         });
     } catch (error: any) {
+        if (error.code === '23505') {
+            return res.status(409).json({
+                status: 'error',
+                error: 'Category already exists'
+            });
+        }
         console.error('[Categories] Create failed:', error);
         res.status(500).json({
             status: 'error',
@@ -77,33 +64,42 @@ router.patch('/:id', authenticate, requireAdmin, async (req: AuthenticatedReques
         const { id } = req.params;
         const { name, description } = req.body;
 
+        const { rows: checkRows } = await db.query('SELECT * FROM categories WHERE id = $1', [id]);
+        if (checkRows.length === 0) {
+            return res.status(404).json({
+                status: 'error',
+                error: 'Category not found'
+            });
+        }
+
         const updates: any = {};
         if (name !== undefined) updates.name = name.trim();
         if (description !== undefined) updates.description = description?.trim() || null;
-        updates.updated_at = new Date().toISOString();
 
-        const { data, error } = await supabase
-            .from('categories')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) {
-            if (error.code === '23505') {
-                return res.status(409).json({
-                    status: 'error',
-                    error: 'Category name already exists'
-                });
-            }
-            throw error;
+        const keys = Object.keys(updates);
+        if (keys.length === 0) {
+            return res.json({ status: 'success', category: checkRows[0] });
         }
+
+        const setClause = keys.map((key, index) => `${key} = $${index + 2}`).join(', ');
+        const values = Object.values(updates);
+
+        const { rows } = await db.query(
+            `UPDATE categories SET ${setClause}, created_at = created_at WHERE id = $1 RETURNING *`,
+            [id, ...values]
+        );
 
         res.json({
             status: 'success',
-            category: data
+            category: rows[0]
         });
     } catch (error: any) {
+        if (error.code === '23505') {
+            return res.status(409).json({
+                status: 'error',
+                error: 'Category name already exists'
+            });
+        }
         console.error('[Categories] Update failed:', error);
         res.status(500).json({
             status: 'error',
@@ -117,14 +113,21 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
     try {
         const { id } = req.params;
 
-        // Check if category is in use by products
-        const { data: products, error: checkError } = await supabase
-            .from('products')
-            .select('id')
-            .eq('category', (await supabase.from('categories').select('name').eq('id', id).single()).data?.name)
-            .limit(1);
+        // Get category name
+        const { rows: catRows } = await db.query('SELECT name FROM categories WHERE id = $1', [id]);
+        if (catRows.length === 0) {
+            return res.status(404).json({
+                status: 'error',
+                error: 'Category not found'
+            });
+        }
+        const categoryName = catRows[0].name;
 
-        if (checkError) throw checkError;
+        // Check if category is in use by products
+        const { rows: products } = await db.query(
+            'SELECT id FROM products WHERE category = $1 LIMIT 1',
+            [categoryName]
+        );
 
         if (products && products.length > 0) {
             return res.status(400).json({
@@ -133,12 +136,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
             });
         }
 
-        const { error } = await supabase
-            .from('categories')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await db.query('DELETE FROM categories WHERE id = $1', [id]);
 
         res.json({
             status: 'success',

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../services/database';
+import { db } from '../services/database';
 import { sendError } from '../utils/response';
 import { LRUCache } from 'lru-cache';
 
@@ -28,7 +28,7 @@ const executeWithCache = async (req: Request, res: Response, fetchFn: () => Prom
     }
 };
 
-// Get dashboard metrics (matches Python backend /api/dashboard/metrics)
+// Get dashboard metrics
 router.get('/metrics', async (req: Request, res: Response) => {
     executeWithCache(req, res, async () => {
         const range = req.query.range as string || 'month';
@@ -38,18 +38,14 @@ router.get('/metrics', async (req: Request, res: Response) => {
         let previousStart: string;
         let previousEnd: string;
 
-        // Calculate date ranges based on selected period
+        // Calculate date ranges
         switch (range) {
             case 'today':
-                const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-                currentStart = todayStart.toISOString().split('T')[0];
-                currentEnd = todayEnd.toISOString().split('T')[0];
-                
+                currentStart = today.toISOString().split('T')[0];
+                currentEnd = currentStart;
                 const yesterday = new Date(today);
                 yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-                previousStart = yesterdayStart.toISOString().split('T')[0];
+                previousStart = yesterday.toISOString().split('T')[0];
                 previousEnd = previousStart;
                 break;
             case 'week':
@@ -59,7 +55,6 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 thisMonday.setDate(today.getDate() - mondayOffset);
                 currentStart = thisMonday.toISOString().split('T')[0];
                 currentEnd = today.toISOString().split('T')[0];
-                
                 const lastWeekMonday = new Date(thisMonday);
                 lastWeekMonday.setDate(thisMonday.getDate() - 7);
                 const lastWeekSunday = new Date(thisMonday);
@@ -70,7 +65,6 @@ router.get('/metrics', async (req: Request, res: Response) => {
             case 'year':
                 currentStart = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
                 currentEnd = today.toISOString().split('T')[0];
-                
                 previousStart = new Date(today.getFullYear() - 1, 0, 1).toISOString().split('T')[0];
                 previousEnd = new Date(today.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
                 break;
@@ -78,42 +72,30 @@ router.get('/metrics', async (req: Request, res: Response) => {
             default:
                 currentStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
                 currentEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-                
                 previousStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0];
                 previousEnd = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
                 break;
         }
 
-        // Helper function to get aggregated metrics from daily_sales_summary materialized view
         const getMetricsForPeriod = async (start: string, end: string) => {
-            const { data, error } = await supabase
-                .from('daily_sales_summary')
-                .select('y, transactions_count, items_sold')
-                .gte('ds', start)
-                .lte('ds', end);
-
-            if (error) throw error;
-
-            return (data || []).reduce((acc, row) => ({
-                revenue: acc.revenue + (Number(row.y) || 0),
-                transactions: acc.transactions + (Number(row.transactions_count) || 0),
-                items: acc.items + (Number(row.items_sold) || 0)
-            }), { revenue: 0, transactions: 0, items: 0 });
+            const { rows } = await db.query(
+                'SELECT SUM(y) as revenue, SUM(transactions_count) as transactions, SUM(items_sold) as items FROM daily_sales_summary WHERE ds >= $1 AND ds <= $2',
+                [start, end]
+            );
+            const row = rows[0];
+            return {
+                revenue: Number(row.revenue) || 0,
+                transactions: Number(row.transactions) || 0,
+                items: Number(row.items) || 0
+            };
         };
 
         const currentMetrics = await getMetricsForPeriod(currentStart, currentEnd);
         const previousMetrics = await getMetricsForPeriod(previousStart, previousEnd);
 
-        // Calculate percentage changes
-        const revenueChange = previousMetrics.revenue > 0
-            ? ((currentMetrics.revenue - previousMetrics.revenue) / previousMetrics.revenue * 100)
-            : 0;
-        const transactionsChange = previousMetrics.transactions > 0
-            ? ((currentMetrics.transactions - previousMetrics.transactions) / previousMetrics.transactions * 100)
-            : 0;
-        const itemsChange = previousMetrics.items > 0
-            ? ((currentMetrics.items - previousMetrics.items) / previousMetrics.items * 100)
-            : 0;
+        const revenueChange = previousMetrics.revenue > 0 ? ((currentMetrics.revenue - previousMetrics.revenue) / previousMetrics.revenue * 100) : 0;
+        const transactionsChange = previousMetrics.transactions > 0 ? ((currentMetrics.transactions - previousMetrics.transactions) / previousMetrics.transactions * 100) : 0;
+        const itemsChange = previousMetrics.items > 0 ? ((currentMetrics.items - previousMetrics.items) / previousMetrics.items * 100) : 0;
 
         return {
             totalRevenue: currentMetrics.revenue,
@@ -129,156 +111,100 @@ router.get('/metrics', async (req: Request, res: Response) => {
 // Get sales trend (last 7 days)
 router.get('/sales-trend', async (req: Request, res: Response) => {
     executeWithCache(req, res, async () => {
-        const { data, error } = await supabase
-            .from('daily_sales_summary')
-            .select('ds, y')
-            .order('ds', { ascending: false })
-            .limit(7);
-
-        if (error) throw error;
-
+        const { rows } = await db.query('SELECT ds, y FROM daily_sales_summary ORDER BY ds DESC LIMIT 7');
         return {
             status: 'success',
-            trend: data?.reverse() || []
+            trend: rows.reverse()
         };
     });
 });
 
-// Get sales chart data (last 90 days) - Required by Dashboard.tsx
+// Get sales chart data (last 90 days)
 router.get('/sales-chart', async (req: Request, res: Response) => {
     executeWithCache(req, res, async () => {
-        // Calculate date 90 days ago
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
         const dateFilter = ninetyDaysAgo.toISOString().split('T')[0];
 
-        const { data, error } = await supabase
-            .from('daily_sales_summary')
-            .select('ds, y, transactions_count')
-            .gte('ds', dateFilter)
-            .order('ds', { ascending: true });
-
-        if (error) throw error;
-
-        // Format response to match frontend expectations
-        const formattedData = (data || []).map(row => ({
-            date: row.ds,
-            sales: row.y || 0,
-            transactions_count: row.transactions_count || 0
-        }));
-
-        return formattedData;
+        const { rows } = await db.query(
+            'SELECT ds as date, y as sales, transactions_count FROM daily_sales_summary WHERE ds >= $1 ORDER BY ds ASC',
+            [dateFilter]
+        );
+        return rows;
     });
 });
 
-// Get category sales breakdown (last 90 days) - Required by Dashboard.tsx
+// Get category sales breakdown
 router.get('/category-sales', async (req: Request, res: Response) => {
     executeWithCache(req, res, async () => {
-        // Category color mapping (Solid Indigo/Blue Theme)
         const CATEGORY_COLOR_MAP: Record<string, string> = {
-            'Coffee': '#3457D5',      // Royal Azure
-            'Tea': '#8A2BE2',         // Blue Violet
-            'Non-Coffee': '#7B68EE',  // Medium Slate Blue
-            'Pastry': '#4B61D1',      // Slate Indigo
-            'Light Meals': '#6F00FF', // Neon Violet
-            'Seasonal': '#4169E1'     // Royal Blue
+            'Coffee': '#3457D5', 'Tea': '#8A2BE2', 'Non-Coffee': '#7B68EE',
+            'Pastry': '#4B61D1', 'Light Meals': '#6F00FF', 'Seasonal': '#4169E1'
         };
 
-        // Calculate date 90 days ago
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
         const dateFilter = ninetyDaysAgo.toISOString().split('T')[0];
 
-        const { data, error } = await supabase
-            .from('category_sales_summary')
-            .select('category, revenue')
-            .gte('ds', dateFilter);
+        const { rows } = await db.query(
+            'SELECT category, SUM(revenue) as revenue FROM category_sales_summary WHERE ds >= $1 GROUP BY category',
+            [dateFilter]
+        );
 
-        if (error) throw error;
-
-        // Aggregate by category
-        const categoryTotals: Record<string, number> = {};
-        (data || []).forEach(row => {
-            const category = row.category || 'Unknown';
-            categoryTotals[category] = (categoryTotals[category] || 0) + (row.revenue || 0);
-        });
-
-        // Format response with colors
-        const formattedData = Object.entries(categoryTotals)
-            .map(([category, revenue]) => ({
-                category,
-                value: revenue,
-                color: CATEGORY_COLOR_MAP[category] || '#94a3b8' // Default gray for unknown categories
-            }))
-            .sort((a, b) => b.value - a.value); // Sort by revenue descending
+        const formattedData = rows.map((row: any) => ({
+            category: row.category,
+            value: Number(row.revenue),
+            color: CATEGORY_COLOR_MAP[row.category] || '#94a3b8'
+        })).sort((a: any, b: any) => b.value - a.value);
 
         return formattedData;
     });
 });
 
-// Get today's summary - items sold, transactions, products sold
+// Get today's summary
 router.get('/today', async (req: Request, res: Response) => {
     executeWithCache(req, res, async () => {
         const now = new Date();
-        // Get start of today (00:00:00) and end of today (23:59:59)
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-        const todayStartISO = todayStart.toISOString();
-        const todayEndISO = todayEnd.toISOString();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
 
+        const { rows: todayTx } = await db.query(
+            'SELECT * FROM transactions WHERE date >= $1 AND date <= $2',
+            [start, end]
+        );
 
+        const txIds = todayTx.map((t: any) => t.id);
+        let productsArray: any[] = [];
 
-        // Get today's transactions using proper timestamp range
-        const { data: todayTx, error: txError } = await supabase
-            .from('transactions')
-            .select('id, total_amount, items_count, created_at, date')
-            .gte('date', todayStartISO)
-            .lte('date', todayEndISO);
+        if (txIds.length > 0) {
+            const { rows: todayItems } = await db.query(
+                `SELECT ti.quantity, ti.subtotal, p.id, p.name, p.category 
+                 FROM transaction_items ti 
+                 JOIN products p ON ti.product_id = p.id 
+                 WHERE ti.transaction_id = ANY($1)`,
+                [txIds]
+            );
 
-        if (txError) throw txError;
-
-        // Get today's transaction items with product info
-        const { data: todayItems, error: itemsError } = await supabase
-            .from('transaction_items')
-            .select(`
-                quantity,
-                subtotal,
-                product:products(id, name, category)
-            `)
-            .in('transaction_id', (todayTx || []).map(t => t.id));
-
-        if (itemsError) throw itemsError;
-
-        // Calculate metrics
-        const totalTransactions = (todayTx || []).length;
-        const totalRevenue = (todayTx || []).reduce((sum, t) => sum + (t.total_amount || 0), 0);
-        const totalItems = (todayTx || []).reduce((sum, t) => sum + (t.items_count || 0), 0);
-
-        // Aggregate products sold
-        const productsSold: Record<string, { name: string; category: string; quantity: number; revenue: number }> = {};
-        (todayItems || []).forEach((item: any) => {
-            const productId = item.product?.id;
-            if (productId) {
-                if (!productsSold[productId]) {
-                    productsSold[productId] = {
-                        name: item.product.name,
-                        category: item.product.category || 'Unknown',
-                        quantity: 0,
-                        revenue: 0
-                    };
+            const productsSold: Record<string, any> = {};
+            todayItems.forEach((item: any) => {
+                if (!productsSold[item.id]) {
+                    productsSold[item.id] = { name: item.name, category: item.category, quantity: 0, revenue: 0 };
                 }
-                productsSold[productId].quantity += item.quantity || 0;
-                productsSold[productId].revenue += item.subtotal || 0;
-            }
-        });
+                productsSold[item.id].quantity += item.quantity;
+                productsSold[item.id].revenue += Number(item.subtotal);
+            });
 
-        // Convert to array and sort by quantity
-        const productsArray = Object.entries(productsSold)
-            .map(([id, data]) => ({ id, ...data }))
-            .sort((a, b) => b.quantity - a.quantity);
+            productsArray = Object.entries(productsSold)
+                .map(([id, data]) => ({ id, ...data as any }))
+                .sort((a, b) => b.quantity - a.quantity);
+        }
+
+        const totalTransactions = todayTx.length;
+        const totalRevenue = todayTx.reduce((sum: number, t: any) => sum + Number(t.total_amount), 0);
+        const totalItems = todayTx.reduce((sum: number, t: any) => sum + Number(t.items_count), 0);
 
         return {
-            date: todayStartISO.split('T')[0],
+            date: start.split('T')[0],
             totalTransactions,
             totalRevenue,
             totalItems,
@@ -289,4 +215,3 @@ router.get('/today', async (req: Request, res: Response) => {
 });
 
 export default router;
-

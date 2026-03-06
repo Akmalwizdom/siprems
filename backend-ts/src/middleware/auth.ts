@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../services/database';
+import { db } from '../services/database';
 import { verifyFirebaseIdToken } from '../services/firebase-auth';
 
 export type UserRole = 'user' | 'admin';
@@ -16,15 +16,10 @@ function extractBearerToken(authHeader: string | undefined): string | null {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return null;
     }
-
     const token = authHeader.slice('Bearer '.length).trim();
     return token.length > 0 ? token : null;
 }
 
-/**
- * Middleware to authenticate user by Firebase ID token and
- * fetch user role from Supabase.
- */
 export async function authenticate(
     req: AuthenticatedRequest,
     res: Response,
@@ -38,49 +33,37 @@ export async function authenticate(
 
         try {
             const verifiedUser = await verifyFirebaseIdToken(token);
-            const userId = verifiedUser.uid;
-            const email = verifiedUser.email || `${userId}@firebase.local`;
+            const firebaseUid = verifiedUser.uid;
+            
+            // Fetch user from PostgreSQL
+            const { rows } = await db.query(
+                'SELECT id, email, role FROM users WHERE firebase_uid = $1',
+                [firebaseUid]
+            );
 
-            // Fetch user role from Supabase
-            const { data: userData, error } = await supabase
-                .from('users')
-                .select('id, email, role')
-                .eq('firebase_uid', userId)
-                .single();
-
-            if (error || !userData) {
+            if (rows.length === 0) {
+                const email = verifiedUser.email || `${firebaseUid}@firebase.local`;
                 const displayName = verifiedUser.name || null;
                 const avatarUrl = verifiedUser.picture || null;
-
-                // Default role for new users (Phase 2 security hardening).
-                // Admins must be promoted explicitly via user management.
                 const assignedRole: UserRole = 'user';
 
                 console.log(`[Auth] Creating new user: ${email}, role: ${assignedRole}`);
 
-                const { data: newUser, error: createError } = await supabase
-                    .from('users')
-                    .insert({
-                        firebase_uid: userId,
-                        email,
-                        role: assignedRole,
-                        display_name: displayName,
-                        avatar_url: avatarUrl,
-                    })
-                    .select()
-                    .single();
+                const { rows: newRows } = await db.query(
+                    `INSERT INTO users (firebase_uid, email, role, display_name, avatar_url) 
+                     VALUES ($1, $2, $3, $4, $5) 
+                     RETURNING id, email, role`,
+                    [firebaseUid, email, assignedRole, displayName, avatarUrl]
+                );
 
-                if (createError) {
-                    console.error('Error creating user:', createError);
-                    return res.status(500).json({ error: 'Failed to create user' });
-                }
-
+                const newUser = newRows[0];
                 req.user = {
                     id: newUser.id,
                     email: newUser.email,
                     role: newUser.role as UserRole,
                 };
             } else {
+                const userData = rows[0];
                 req.user = {
                     id: userData.id,
                     email: userData.email,
@@ -99,15 +82,11 @@ export async function authenticate(
     }
 }
 
-/**
- * Middleware factory to require specific role(s)
- */
 export function requireRole(...allowedRoles: UserRole[]) {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
         if (!req.user) {
             return res.status(401).json({ error: 'Unauthorized: Not authenticated' });
         }
-
         if (!allowedRoles.includes(req.user.role)) {
             return res.status(403).json({
                 error: 'Forbidden: Insufficient permissions',
@@ -115,19 +94,12 @@ export function requireRole(...allowedRoles: UserRole[]) {
                 current: req.user.role,
             });
         }
-
         next();
     };
 }
 
-/**
- * Middleware to require admin role
- */
 export const requireAdmin = requireRole('admin');
 
-/**
- * Optional authentication - doesn't fail if no token
- */
 export async function optionalAuth(
     req: AuthenticatedRequest,
     res: Response,
@@ -135,9 +107,7 @@ export async function optionalAuth(
 ) {
     const token = extractBearerToken(req.headers.authorization);
     if (!token) {
-        return next(); // Continue without auth
+        return next();
     }
-
-    // If token provided, validate it
     return authenticate(req, res, next);
 }

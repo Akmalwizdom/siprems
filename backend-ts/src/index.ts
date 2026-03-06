@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 import { config } from './config';
 import { requestIdMiddleware } from './middleware/request-id';
 import { logger } from './utils/logger';
@@ -17,6 +19,12 @@ import { globalLimiter } from './middleware/rate-limit';
 import { register, httpRequestDurationMicroseconds, httpRequestCount } from './utils/metrics';
 
 const app = express();
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../public/uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
@@ -38,6 +46,9 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Increased for base64 image uploads
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestIdMiddleware); // Structured logging + request tracing
+
+// Serve static files from public directory
+app.use('/uploads', express.static('public/uploads'));
 
 // Metrics Middleware
 app.use((req, res, next) => {

@@ -16,8 +16,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "@supabase/supabase-js": "^2.47.10",
+    "@google/generative-ai": "^0.24.1",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -32,6 +31,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "^3.2.4",
     "nodemon": "^3.1.9",
     "tsx": "^4.19.2",

@@ -1,48 +1,55 @@
 import { Router, Request, Response } from 'express';
-import { db, supabase } from '../services/database';
-import { authenticate, requireAdmin, optionalAuth, AuthenticatedRequest } from '../middleware/auth';
+import { db } from '../services/database';
+import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { createProductSchema, updateProductSchema } from '../schemas';
 import { sendSuccess, sendError } from '../utils/response';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
-// Get all products with pagination - Match frontend expectations
-// Public access (no auth required for reading)
+// Get all products with pagination
 router.get('/', async (req: Request, res: Response) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const search = req.query.search as string;
         const category = req.query.category as string;
+        const offset = (page - 1) * limit;
 
-        // Build query
-        let query = supabase
-            .from('products')
-            .select('*', { count: 'exact' });
+        let queryText = 'SELECT *, count(*) OVER() AS total_count FROM products';
+        const queryParams: any[] = [];
+        let whereClauses: string[] = [];
 
-        // Apply filters
         if (search) {
-            query = query.or(`name.ilike.%${search}%,category.ilike.%${search}%,sku.ilike.%${search}%`);
+            queryParams.push(`%${search}%`);
+            whereClauses.push(`(name ILIKE $${queryParams.length} OR category ILIKE $${queryParams.length} OR sku ILIKE $${queryParams.length})`);
         }
 
         if (category && category !== 'All') {
-            query = query.eq('category', category);
+            queryParams.push(category);
+            whereClauses.push(`category = $${queryParams.length}`);
         }
 
-        // Apply pagination
-        const from = (page - 1) * limit;
-        const to = from + limit - 1;
-        query = query.range(from, to).order('name');
+        if (whereClauses.length > 0) {
+            queryText += ' WHERE ' + whereClauses.join(' AND ');
+        }
 
-        const { data, error, count } = await query;
+        queryParams.push(limit, offset);
+        queryText += ` ORDER BY name ASC LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`;
 
-        if (error) throw error;
-
-        const total = count || 0;
+        const { rows } = await db.query(queryText, queryParams);
+        
+        const total = rows.length > 0 ? parseInt(rows[0].total_count) : 0;
         const total_pages = Math.ceil(total / limit);
 
-        // Return paginated response format expected by frontend
+        // Hapus total_count dari setiap baris data
+        const data = rows.map(r => {
+            const { total_count, ...rest } = r;
+            return rest;
+        });
+
         res.json({
             data: data || [],
             total,
@@ -56,21 +63,11 @@ router.get('/', async (req: Request, res: Response) => {
     }
 });
 
-// Get product categories - Required by Transaction page
+// Get product categories
 router.get('/categories', async (req: Request, res: Response) => {
     try {
-        // Query from categories table instead of unique values from products
-        const { data, error } = await supabase
-            .from('categories')
-            .select('name')
-            .order('name');
-
-        if (error) throw error;
-
-        // Extract category names for backward compatibility
-        const categories = (data || []).map(c => c.name);
-
-        // Return in format expected by frontend
+        const { rows } = await db.query('SELECT name FROM categories ORDER BY name ASC');
+        const categories = rows.map(c => c.name);
         res.json({ categories });
     } catch (error: any) {
         console.error('[Products] Get categories failed:', error);
@@ -82,11 +79,9 @@ router.get('/categories', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
     try {
         const product = await db.products.getById(req.params.id);
-
         if (!product) {
             return sendError(res, 'PRODUCT_NOT_FOUND', 'Product not found', 404);
         }
-
         sendSuccess(res, { product });
     } catch (error: any) {
         console.error('[Products] Get by ID failed:', error);
@@ -94,18 +89,17 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 });
 
-// Update product stock (Admin only) with Zod validation
+// Update product
 router.patch('/:id', authenticate, requireAdmin, validate(updateProductSchema), async (req: AuthenticatedRequest, res: Response) => {
     try {
+        const { id } = req.params;
         const { stock, price, ...rest } = req.body;
 
         const updates: any = { ...rest };
         if (stock !== undefined) updates.stock = stock;
-        // Map frontend 'price' to database 'selling_price' column
         if (price !== undefined) updates.selling_price = price;
 
-        const product = await db.products.update(req.params.id, updates);
-
+        const product = await db.products.update(id, updates);
         sendSuccess(res, { product });
     } catch (error: any) {
         console.error('[Products] Update failed:', error);
@@ -113,47 +107,27 @@ router.patch('/:id', authenticate, requireAdmin, validate(updateProductSchema), 
     }
 });
 
-// Create product (Admin only) with Zod validation
+// Create product
 router.post('/', authenticate, requireAdmin, validate(createProductSchema), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { name, category, sku, stock, selling_price, cost_price, image_url, description } = req.body;
 
-        const { data, error } = await supabase
-            .from('products')
-            .insert({
-                name,
-                category: category || 'Uncategorized',
-                sku: sku || null,
-                stock: stock || 0,
-                selling_price,
-                cost_price: cost_price || 0,
-                image_url: image_url || null,
-                description: description || null,
-            })
-            .select()
-            .single();
+        const { rows } = await db.query(
+            'INSERT INTO products (name, category, sku, stock, selling_price, cost_price, image_url, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [name, category || 'Uncategorized', sku || null, stock || 0, selling_price, cost_price || 0, image_url || null, description || null]
+        );
 
-        if (error) throw error;
-
-        sendSuccess(res, { product: data });
+        sendSuccess(res, { product: rows[0] });
     } catch (error: any) {
         console.error('[Products] Create failed:', error);
         sendError(res, 'PRODUCT_CREATE_ERROR', error.message);
     }
 });
 
-// Delete product (Admin only)
+// Delete product
 router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const { id } = req.params;
-
-        const { error } = await supabase
-            .from('products')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-
+        await db.query('DELETE FROM products WHERE id = $1', [req.params.id]);
         sendSuccess(res, { message: 'Product deleted successfully' });
     } catch (error: any) {
         console.error('[Products] Delete failed:', error);
@@ -161,62 +135,46 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthenticatedReque
     }
 });
 
-// Upload product image (Admin only)
+// Upload product image
 router.post('/:id/image', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { image } = req.body; // Base64 encoded image
+        const { image } = req.body;
 
         if (!image) {
             return sendError(res, 'VALIDATION_ERROR', 'Image data is required', 400);
         }
 
-        // Extract base64 data and content type
         const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (!matches || matches.length !== 3) {
-            return sendError(res, 'VALIDATION_ERROR', 'Invalid image format. Expected base64 data URL.', 400);
+            return sendError(res, 'VALIDATION_ERROR', 'Invalid image format.', 400);
         }
 
         const contentType = matches[1];
         const base64Data = matches[2];
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // Generate unique filename
         const extension = contentType.split('/')[1] || 'jpg';
         const filename = `product-${id}-${Date.now()}.${extension}`;
-        const filePath = `products/${filename}`;
-
-        // Upload to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(filePath, buffer, {
-                contentType,
-                upsert: true
-            });
-
-        if (uploadError) {
-            console.error('[Products] Upload error:', uploadError);
-            throw uploadError;
+        
+        // Simpan ke direktori lokal
+        const uploadDir = path.join(__dirname, '../../public/uploads/products');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
         }
 
-        // Get public URL
-        const { data: urlData } = supabase.storage
-            .from('product-images')
-            .getPublicUrl(filePath);
+        const filePath = path.join(uploadDir, filename);
+        fs.writeFileSync(filePath, buffer);
 
-        const imageUrl = urlData.publicUrl;
+        // URL lokal (relatif ke backend)
+        const imageUrl = `/uploads/products/${filename}`;
 
-        // Update product with new image URL
-        const { data: product, error: updateError } = await supabase
-            .from('products')
-            .update({ image_url: imageUrl })
-            .eq('id', id)
-            .select()
-            .single();
+        const { rows } = await db.query(
+            'UPDATE products SET image_url = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+            [imageUrl, id]
+        );
 
-        if (updateError) throw updateError;
-
-        sendSuccess(res, { image_url: imageUrl, product });
+        sendSuccess(res, { image_url: imageUrl, product: rows[0] });
     } catch (error: any) {
         console.error('[Products] Image upload failed:', error);
         sendError(res, 'IMAGE_UPLOAD_ERROR', error.message);
