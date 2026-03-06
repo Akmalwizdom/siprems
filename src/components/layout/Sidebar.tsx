@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 import { useRole, UserRole } from '../../context/AuthContext';
 import { API_BASE_URL } from '../../config';
+import customLogo from '../../assets/logo-siprems.png';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -156,11 +157,11 @@ export function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMo
         {/* Header */}
         <div className="p-4 flex items-center justify-between h-16 flex-shrink-0">
           <div className="flex items-center gap-3 lg-center-when-collapsed">
-            {storeLogo ? (
+            {storeLogo || customLogo ? (
               <img 
-                src={storeLogo} 
+                src={storeLogo || customLogo} 
                 alt="Store Logo" 
-                className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                className="w-10 h-10 object-contain flex-shrink-0"
               />
             ) : (
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">

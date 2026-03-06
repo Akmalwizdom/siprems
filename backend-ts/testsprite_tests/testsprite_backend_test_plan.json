@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "create_transaction_atomic_and_stock_update",
+    "description": "Test the POST /api/v1/transactions endpoint to ensure that transactions are created atomically, stock levels are decremented correctly, and historical transaction data is recorded for forecasting."
+  },
+  {
+    "id": "TC002",
+    "title": "list_transactions_for_store",
+    "description": "Test the GET /api/v1/transactions endpoint to verify that it returns a list of transactions filtered by store_id with correct transaction details."
+  },
+  {
+    "id": "TC003",
+    "title": "create_product_and_retrieve_details",
+    "description": "Test the POST /api/v1/products endpoint to create a new product and then GET /api/v1/products/{product_id} to retrieve and verify the product details."
+  },
+  {
+    "id": "TC004",
+    "title": "update_nonexistent_product_returns_404",
+    "description": "Test the PATCH /api/v1/products/{nonexistent_product_id} endpoint to ensure it returns a 404 Not Found error when attempting to update a product that does not exist."
+  },
+  {
+    "id": "TC005",
+    "title": "filter_products_by_category_and_stock",
+    "description": "Test the GET /api/v1/products endpoint with query parameters category and stock_lt to verify that it returns products filtered by category and stock threshold."
+  },
+  {
+    "id": "TC006",
+    "title": "create_event_and_list_events",
+    "description": "Test the POST /api/v1/events endpoint to create a calendar event and then GET /api/v1/events to verify the event is listed with correct details."
+  },
+  {
+    "id": "TC007",
+    "title": "event_creation_validation_error",
+    "description": "Test the POST /api/v1/events endpoint with missing required fields to verify that it returns a 400 validation error."
+  },
+  {
+    "id": "TC008",
+    "title": "calibrate_event_and_verify_calibrated_flag",
+    "description": "Test the POST /api/v1/events/{event_id}/calibrate endpoint to apply calibration parameters and then GET /api/v1/events to verify the event shows a calibrated flag."
+  },
+  {
+    "id": "TC009",
+    "title": "get_dashboard_metrics_for_date_range",
+    "description": "Test the GET /api/v1/dashboard/metrics endpoint with a valid date range to verify it returns aggregated sales and performance metrics."
+  },
+  {
+    "id": "TC010",
+    "title": "get_sales_chart_with_invalid_date_range",
+    "description": "Test the GET /api/v1/dashboard/sales-chart endpoint with an invalid date range to verify it returns a 400 error indicating invalid date range."
+  }
+]
