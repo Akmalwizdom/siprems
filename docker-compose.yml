@@ -1,6 +1,31 @@
 services:
   # ===================================
-  # BACKEND TypeScript – Express + Supabase
+  # DATABASE – PostgreSQL Local
+  # ===================================
+  db:
+    image: postgres:16-alpine
+    container_name: siprems-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=siprems
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./scripts/supabase-dump.sql:/docker-entrypoint-initdb.d/supabase-dump.sql
+    networks:
+      - siprems-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d siprems"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===================================
+  # BACKEND TypeScript – Express
   # ===================================
   backend:
     build:
@@ -13,13 +38,13 @@ services:
     env_file:
       - ./backend-ts/.env
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - ML_SERVICE_URL=http://ml-service:8001
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/siprems
       - PORT=8000
+      - ML_SERVICE_URL=http://ml-service:8001
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
+      db:
+        condition: service_healthy
       ml-service:
         condition: service_healthy
     networks:
@@ -43,8 +68,11 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/siprems
       - PORT=8001
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - model_data:/app/models # Model persistence
     networks:
@@ -98,9 +126,11 @@ services:
     restart: "no"
     command: [ "python", "/app/train_on_startup.py" ]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/siprems
       - ML_SERVICE_URL=http://ml-service:8001
     depends_on:
+      db:
+        condition: service_healthy
       ml-service:
         condition: service_healthy
     networks:
@@ -112,6 +142,8 @@ services:
 # VOLUMES
 # ===================================
 volumes:
+  postgres_data:
+    driver: local
   model_data:
     driver: local
 
